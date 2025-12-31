@@ -31,6 +31,10 @@ return new class extends Migration
             $table->boolean('is_analyzed')->default(false);
 
             $table->timestamps();
+            $table->string('phishing_label')->nullable(); // safe, suspicious, phishing
+            $table->unsignedTinyInteger('phishing_score')->nullable(); // 0–100
+            $table->json('phishing_reasons')->nullable();
+            $table->boolean('is_analyzed')->default(false);
         });
     }
 

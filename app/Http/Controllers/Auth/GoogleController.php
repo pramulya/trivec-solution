@@ -27,19 +27,18 @@ class GoogleController extends Controller
     public function callback()
     {
         $googleUser = Socialite::driver('google')->user();
-
         $user = auth()->user();
 
         $user->update([
             'google_id' => $googleUser->getId(),
-            'google_token' => $googleUser->token,
-            'google_refresh_token' => $googleUser->refreshToken ?? $user->google_refresh_token,
+            'google_token' => $googleUser->token, // ✅ STRING ASLI
+            'google_refresh_token' => $googleUser->refreshToken 
+                ?? $user->google_refresh_token,
             'gmail_connected_at' => now(),
         ]);
 
-        return redirect('/dashboard');
+        return redirect('/inbox');
     }
-
     public function disconnect(Request $request)
     {
         $user = $request->user();

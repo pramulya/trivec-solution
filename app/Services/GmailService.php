@@ -23,81 +23,80 @@ class GmailService
         $this->client->setAccessType('offline');
         $this->client->setPrompt('consent');
 
-        // Set token
+        // SET TOKEN DENGAN FORMAT BENAR
         $this->client->setAccessToken([
-            'access_token' => $user->google_token,
+            'access_token'  => $user->google_token,
             'refresh_token' => $user->google_refresh_token,
         ]);
 
-        // Auto refresh token
+        // AUTO REFRESH
         if ($this->client->isAccessTokenExpired()) {
-            if ($user->google_refresh_token) {
-                $newToken = $this->client->fetchAccessTokenWithRefreshToken(
-                    $user->google_refresh_token
-                );
 
-                $this->client->setAccessToken($newToken);
-
-                $user->update([
-                    'google_token' => $newToken['access_token'],
-                ]);
+            if (!$user->google_refresh_token) {
+                throw new \Exception('Google refresh token missing. Reconnect Gmail.');
             }
+
+            $newToken = $this->client->fetchAccessTokenWithRefreshToken(
+                $user->google_refresh_token
+            );
+
+        if (isset($newToken['error'])) {
+            throw new \Exception(
+                'Google token refresh failed. Please reconnect Gmail.'
+            );
         }
 
-        // ⬅️ INI YANG KEMARIN HILANG
+
+            $this->client->setAccessToken($newToken);
+
+            $user->update([
+                'google_token' => $newToken['access_token'],
+            ]);
+        }
+
         $this->service = new Google_Service_Gmail($this->client);
     }
 
     /* =====================
         FETCH INBOX
     ===================== */
-    public function fetchInbox(int $limit = 5)
+    public function fetchInbox(int $limit = 1000): array
     {
-        $response = $this->service->users_messages->listUsersMessages('me', [
-            'maxResults' => $limit,
-        ]);
+        $messages = [];
+        $pageToken = null;
 
-        return $response->getMessages() ?? [];
+        do {
+            $params = [
+                'maxResults' => 500, // batas aman Gmail
+            ];
+
+            if ($pageToken) {
+                $params['pageToken'] = $pageToken;
+            }
+
+            $response = $this->service->users_messages->listUsersMessages('me', $params);
+
+            if ($response->getMessages()) {
+                $messages = array_merge($messages, $response->getMessages());
+            }
+
+            $pageToken = $response->getNextPageToken();
+
+            // stop kalau sudah cukup banyak
+            if (count($messages) >= $limit) {
+                break;
+            }
+
+        } while ($pageToken);
+
+        return array_slice($messages, 0, $limit);
     }
+
+
 
     /* =====================
-        GET CONTENT
+        FULL MESSAGE
     ===================== */
-    public function getMessageContent(string $messageId): string
-    {
-        $message = $this->service->users_messages->get(
-            'me',
-            $messageId,
-            ['format' => 'full']
-        );
-
-        return $this->extractBody($message->getPayload());
-    }
-
-
-    /* =====================
-        GET META (subject, from, date)
-    ===================== */
-    public function getMessageMeta(string $messageId): array
-    {
-        $message = $this->service->users_messages->get(
-            'me',
-            $messageId,
-            [
-                'format' => 'metadata',
-                'metadataHeaders' => ['From', 'Subject', 'Date']
-            ]
-        );
-
-        $headers = collect($message->getPayload()->getHeaders());
-
-        return [
-            'from' => optional($headers->firstWhere('name', 'From'))->getValue(),
-            'subject' => optional($headers->firstWhere('name', 'Subject'))->getValue(),
-            'date' => optional($headers->firstWhere('name', 'Date'))->getValue(),
-        ];
-    }
-
     public function getFullMessage(string $messageId): array
     {
         $message = $this->service->users_messages->get(
@@ -109,71 +108,38 @@ class GmailService
         $payload = $message->getPayload();
         $headers = collect($payload->getHeaders());
 
-        $subject = optional($headers->firstWhere('name', 'Subject'))->value;
-        $from    = optional($headers->firstWhere('name', 'From'))->value;
-        $date    = optional($headers->firstWhere('name', 'Date'))->value;
-
-        $body = $this->extractBody($payload);
-
         return [
-            'subject' => $subject,
-            'from'    => $from,
-            'date'    => $date,
-            'body'    => $body,
+            'subject' => optional($headers->firstWhere('name', 'Subject'))->getValue(),
+            'from'    => optional($headers->firstWhere('name', 'From'))->getValue(),
+            'date'    => optional($headers->firstWhere('name', 'Date'))->getValue(),
             'snippet' => $message->getSnippet(),
+            'body'    => $this->extractBody($payload),
         ];
     }
 
+    /* =====================
+        BODY PARSER (FULL)
+    ===================== */
     private function extractBody($payload): string
     {
-        // Case 1: langsung ada body
+        // 1️⃣ Direct body
         if ($payload->getBody() && $payload->getBody()->getData()) {
-            return base64_decode(strtr(
-                $payload->getBody()->getData(),
-                '-_',
-                '+/'
-            ));
+            return $this->decode($payload->getBody()->getData());
         }
 
-        // Case 2: multipart (PALING SERING)
+        // 2️⃣ Multipart (recursive)
         foreach ($payload->getParts() ?? [] as $part) {
-            $mimeType = $part->getMimeType();
-
-            // Prioritaskan HTML
-            if ($mimeType === 'text/html' && $part->getBody()->getData()) {
-                return base64_decode(strtr(
-                    $part->getBody()->getData(),
-                    '-_',
-                    '+/'
-                ));
-            }
-
-            // Fallback ke text/plain
-            if ($mimeType === 'text/plain' && $part->getBody()->getData()) {
-                return base64_decode(strtr(
-                    $part->getBody()->getData(),
-                    '-_',
-                    '+/'
-                ));
-            }
-
-            // Recursive (nested parts)
-            if ($part->getParts()) {
-                $nested = $this->extractBody($part);
-                if ($nested) return $nested;
+            $result = $this->extractBody($part);
+            if (!empty($result)) {
+                return $result;
             }
         }
 
         return '';
     }
 
-
-        private function decodeBody(?string $data): ?string
+    private function decode(string $data): string
     {
-        if (!$data) return null;
-
-        $data = str_replace(['-', '_'], ['+', '/'], $data);
-        return base64_decode($data);
+        return base64_decode(str_replace(['-', '_'], ['+', '/'], $data));
     }
-
 }

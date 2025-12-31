@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Services\GmailService;
 use App\Models\Message;
+use App\Services\PhishingDetectionService;
 
 class InboxController extends Controller
 {
@@ -12,65 +14,74 @@ class InboxController extends Controller
     {
         $user = Auth::user();
 
-        // 1. Pastikan Gmail connected
-        if (!$user->google_token) {
-            return redirect()->back()->with('error', 'Gmail not connected');
+        // Validasi Gmail
+        if (!$user->google_refresh_token) {
+            return back()->with('error', 'Please connect Gmail first');
         }
 
-        $gmail = new GmailService($user);
+        try {
+            $gmail = new GmailService($user);
+            $detector = new PhishingDetectionService();
 
-        // 2. Ambil inbox (5 email terbaru)
-        $messages = $gmail->fetchInbox(5);
+            $messages = $gmail->fetchInbox(1000);
 
-        foreach ($messages as $msg) {
-            $gmailMessageId = $msg->getId();
+            foreach ($messages as $msg) {
+                $gmailMessageId = $msg->getId();
 
-            // 3. Cegah duplikasi
-            if (Message::where('gmail_message_id', $gmailMessageId)->exists()) {
-                continue;
+                // Skip duplikat
+                if (Message::where('gmail_message_id', $gmailMessageId)->exists()) {
+                    continue;
+                }
+
+                $data = $gmail->getFullMessage($gmailMessageId);
+
+                if (empty($data['body'])) {
+                    continue;
+                }
+
+                // DEFAULT: AI OFF
+                $analysis = null;
+
+                // ✅ HANYA JALANKAN AI JIKA AKTIF
+                if ($user->ai_enabled) {
+                    $analysis = $detector->analyze(
+                        $data['subject'] ?? '',
+                        $data['body']
+                    );
+                }
+
+                Message::create([
+                    'user_id'          => $user->id,
+                    'gmail_message_id' => $gmailMessageId,
+                    'from'             => $data['from'] ?? 'Unknown',
+                    'subject'          => $data['subject'] ?? '(No subject)',
+                    'snippet'          => $data['snippet'] ?? null,
+                    'body'             => $data['body'],
+
+                    // 🧠 PHISHING (AMAN WALAU AI OFF)
+                    'phishing_label' => $analysis['label'] ?? null,
+                    'phishing_score' => $analysis['score'] ?? null,
+                    'phishing_rules' => isset($analysis['rules'])
+                        ? json_encode($analysis['rules'])
+                        : null,
+
+                    'is_analyzed' => $analysis !== null,
+                ]);
             }
 
-            // 4. Ambil isi email
-            $data = $gmail->getFullMessage($gmailMessageId);
+            return back()->with('success', 'Inbox synced successfully');
 
-            if (!$data['body']) continue;
-
-            Message::create([
-            'user_id' => $user->id,
-            'gmail_message_id' => $gmailMessageId,
-            'from' => $meta['from'],
-            'subject' => $meta['subject'],
-            'snippet' => $meta['snippet'],
-            'body' => $content, // ⬅️ FULL BODY
-            'is_analyzed' => false,
-        ]);
-
-
-            if (!$body) {
-                continue;
-            }
-
-            // 5. Simpan ke database (SESUIAI STRUKTUR TABEL)
-            Message::create([
-                'user_id'          => $user->id,
-                'gmail_message_id' => $gmailMessageId,
-                'from'             => $meta['from'] ?? 'Unknown',
-                'subject'          => $meta['subject'] ?? '(No subject)',
-                'snippet'          => $meta['snippet'] ?? null,
-                'body'             => $body,
-                'is_analyzed'      => false,
-            ]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Sync failed: ' . $e->getMessage());
         }
-
-        return redirect()->back()->with('success', 'Inbox synced successfully');
     }
+
 
     public function index()
     {
         $messages = Message::where('user_id', auth()->id())
             ->latest()
-            ->take(50)
-            ->get();
+            ->paginate(50);
 
         return view('inbox.index', compact('messages'));
     }
@@ -79,6 +90,11 @@ class InboxController extends Controller
     {
         abort_if($message->user_id !== auth()->id(), 403);
 
-        return view('inbox.show', compact('message'));
+        $rules = json_decode($message->phishing_rules ?? '[]', true);
+
+        preg_match_all('/https?:\/\/[^\s"<]+/i', $message->body, $matches);
+        $links = $matches[0] ?? [];
+
+        return view('inbox.show', compact('message', 'rules', 'links'));
     }
 }
