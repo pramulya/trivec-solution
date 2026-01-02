@@ -28,7 +28,7 @@ class InboxController extends Controller
 
     public function index()
     {
-        $this->autoSync('inbox');
+        // $this->autoSync('inbox'); // Moved to AJAX
         
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'inbox')
@@ -41,7 +41,7 @@ class InboxController extends Controller
 
     public function drafts()
     {
-        $this->autoSync('drafts');
+        // $this->autoSync('drafts');
 
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'drafts')
@@ -54,7 +54,7 @@ class InboxController extends Controller
 
     public function sent()
     {
-        $this->autoSync('sent');
+        // $this->autoSync('sent');
 
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'sent')
@@ -70,7 +70,8 @@ class InboxController extends Controller
         // $this->autoSync('starred'); // Optional: syncing 'STARRED' label might duplicate content if not careful, but let's keep it for now or rely on other syncs
         // Actually, let's keep autoSync but understand it might create copies if we aren't careful with generic sync logic.
         // For now, the VIEW issue is the priority.
-        $this->autoSync('starred');
+        // For now, the VIEW issue is the priority.
+        // $this->autoSync('starred');
 
         $messages = Message::where('user_id', auth()->id())
             ->where('is_starred', true) // ✅ Correct logic
@@ -239,7 +240,7 @@ class InboxController extends Controller
 
     public function trash()
     {
-        $this->autoSync('trash');
+        // $this->autoSync('trash');
 
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'trash')
@@ -252,7 +253,7 @@ class InboxController extends Controller
 
     public function spam()
     {
-        $this->autoSync('spam');
+        // $this->autoSync('spam');
 
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'spam')

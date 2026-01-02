@@ -78,10 +78,11 @@ require __DIR__.'/auth.php';
 Route::middleware('auth')->group(function () {
 
     Route::get('/sms/inbox', [\App\Http\Controllers\SmsController::class, 'inbox'])->name('sms.inbox');
+    Route::post('/sms/send', [\App\Http\Controllers\SmsController::class, 'send'])->name('sms.send');
     Route::post('/sms/store', [\App\Http\Controllers\SmsController::class, 'store'])->name('sms.store');
     Route::post('/sms/sync-termii', [\App\Http\Controllers\SmsController::class, 'sync'])->name('sms.sync.termii');
-    Route::get('/sms/sent', fn () => view('sms.sent'));
-    Route::get('/sms/spam', fn () => view('sms.spam'));
+    Route::get('/sms/sent', [\App\Http\Controllers\SmsController::class, 'sent'])->name('sms.sent');
+    Route::get('/sms/spam', [\App\Http\Controllers\SmsController::class, 'spam'])->name('sms.spam');
     Route::get('/sms/show', fn () => view('sms.show'));
 
 });

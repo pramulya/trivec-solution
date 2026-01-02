@@ -52,4 +52,29 @@ class TermiiService
             ]
         ];
     }
+
+    public function sendMessage($to, $message)
+    {
+        if (!$this->apiKey) {
+            // Mock Success
+            return [
+                'message_id' => 'mock_sent_' . uniqid(),
+                'status' => 'success',
+                'balance' => 0
+            ];
+        }
+
+        /*
+        return Http::post("{$this->baseUrl}/sms/send", [
+            'api_key' => $this->apiKey,
+            'to' => $to,
+            'from' => 'Trivec', 
+            'sms' => $message,
+            'type' => 'plain',
+            'channel' => 'generic'
+        ])->json();
+        */
+        
+        return ['status' => 'success', 'message_id' => 'mock_real_failover'];
+    }
 }

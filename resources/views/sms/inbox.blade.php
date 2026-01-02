@@ -20,18 +20,43 @@
                 </button>
             </form>
 
-            <!-- Add Message Button (AlpineJS Toggle) -->
+            <!-- Send Message Button (AlpineJS Toggle) -->
+            <div x-data="{ openSend: false }">
+                <button @click="openSend = !openSend" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded text-sm font-medium">
+                    Send SMS 📤
+                </button>
+
+                <!-- Send Input Form -->
+                <div x-show="openSend" @click.away="openSend = false" class="absolute right-6 top-16 w-80 bg-gray-800 border border-gray-700 rounded shadow-xl z-50 p-4" style="display: none;">
+                    <form action="{{ route('sms.send') }}" method="POST" class="space-y-3">
+                        @csrf
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">To (Phone)</label>
+                            <input type="text" name="to" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm" placeholder="62812345678" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Message</label>
+                            <textarea name="message" rows="3" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm" placeholder="Type message..." required></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-green-600 hover:bg-green-500 text-white py-1 rounded text-sm">
+                            Send Now
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Add Message Button (Simulate Receive) -->
             <div x-data="{ open: false }">
-            <button @click="open = !open" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-medium">
-                + Add Message
+            <button @click="open = !open" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded text-sm font-medium">
+                + Simulate Receive
             </button>
 
             <!-- Manual Input Form -->
-            <div x-show="open" @click.away="open = false" class="absolute right-6 top-16 w-80 bg-gray-800 border border-gray-700 rounded shadow-xl z-50 p-4">
+            <div x-show="open" @click.away="open = false" class="absolute right-6 top-16 w-80 bg-gray-800 border border-gray-700 rounded shadow-xl z-50 p-4" style="display: none;">
                 <form action="{{ route('sms.store') }}" method="POST" class="space-y-3">
                     @csrf
                     <div>
-                        <label class="block text-xs text-gray-400 mb-1">Sender</label>
+                        <label class="block text-xs text-gray-400 mb-1">Sender (From)</label>
                         <input type="text" name="sender" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm" placeholder="+628..." required>
                     </div>
                     <div>

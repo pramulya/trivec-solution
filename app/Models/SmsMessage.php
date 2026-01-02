@@ -12,8 +12,15 @@ class SmsMessage extends Model
         'source',
         'received_at',
         'ai_label',
-        'ai_score'
+        'ai_score',
+        'user_id',
+        'direction',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
     
     protected $casts = [
         'received_at' => 'datetime',

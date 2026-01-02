@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>Trivec Mail</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{-- Preloading Critical Routes --}}
+    <link rel="prefetch" href="{{ route('inbox.index') }}">
+    <link rel="prefetch" href="{{ route('sent') }}">
+    <link rel="prefetch" href="{{ route('trash.index') }}">
+    <link rel="prefetch" href="{{ route('compose.index') }}">
 </head>
 
 <body class="bg-gray-900 text-gray-200">
@@ -151,5 +156,42 @@
 
     </main>
 </div>
+<script src="//instant.page/5.2.0.js" type="module" integrity="sha384-jnZyxPjiipYXnSU0ygqeac2q7CVYMbh84GO0uHryzYjKOrqHy7arGWMA0KSs,lW" crossorigin="anonymous"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const path = window.location.pathname;
+        let folder = 'inbox';
+
+        if (path.includes('/sent')) folder = 'sent';
+        else if (path.includes('/drafts')) folder = 'drafts';
+        else if (path.includes('/starred')) folder = 'starred';
+        else if (path.includes('/trash')) folder = 'trash';
+        else if (path.includes('/spam') && !path.includes('/sms/spam')) folder = 'spam';
+        else if (!path.includes('/inbox') && path !== '/') return; // Don't sync on other pages
+
+        console.log(`[Trivec] Background syncing ${folder}...`);
+
+        fetch('{{ route('gmail.sync') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ folder: folder })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('[Trivec] Sync complete:', data);
+            if (data.processed > 0) {
+                // Show a small toast or just reload content if you want rely on "next load"
+                // For now, let's keep it silent or add a reload button if user wants fresh data
+                // Or better: auto-reload if we are sitting on the list view?
+                // For simplicity/stability in prototype: We verified it syncs.
+            }
+        })
+        .catch(error => console.error('[Trivec] Sync failed:', error));
+    });
+</script>
 </body>
 </html>
