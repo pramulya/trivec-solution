@@ -71,3 +71,12 @@ Route::post('/ai-mode/toggle', function () {
 })->middleware('auth')->name('ai.toggle');
 
 require __DIR__.'/auth.php';
+
+Route::middleware('auth')->group(function () {
+
+    Route::get('/sms/inbox', fn () => view('sms.inbox'));
+    Route::get('/sms/sent', fn () => view('sms.sent'));
+    Route::get('/sms/spam', fn () => view('sms.spam'));
+    Route::get('/sms/show', fn () => view('sms.show'));
+
+});
