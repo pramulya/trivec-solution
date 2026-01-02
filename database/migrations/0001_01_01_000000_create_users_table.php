@@ -19,6 +19,13 @@ return new class extends Migration
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();
+            
+            // Google & AI Integrations (Consolidated)
+            $table->string('google_id')->nullable();
+            $table->text('google_token')->nullable();
+            $table->text('google_refresh_token')->nullable();
+            $table->timestamp('gmail_connected_at')->nullable();
+            $table->boolean('ai_enabled')->default(true);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

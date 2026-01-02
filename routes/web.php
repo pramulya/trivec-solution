@@ -37,19 +37,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/inbox/{message}', [InboxController::class, 'show'])
         ->name('inbox.show');
 
-    // Sync Gmail
+    Route::post('/inbox/{message}/star', [InboxController::class, 'toggleStar'])
+        ->name('inbox.star');
+
+    // Folders
     Route::post('/gmail/sync', [InboxController::class, 'sync'])
         ->name('gmail.sync');
 
     Route::get('/sent', [InboxController::class, 'sent'])->name('sent');
     Route::get('/starred', [InboxController::class, 'starred'])->name('starred');
+    Route::get('/drafts', [InboxController::class, 'drafts'])->name('drafts.index');
 });
 
 Route::middleware(['auth'])->group(function () {
 
-    Route::get('/drafts', function () {
-        return view('folders.drafts');
-    })->name('drafts.index');
+    Route::get('/drafts', [InboxController::class, 'drafts'])->name('drafts.index');
 
     Route::get('/spam', function () {
         return view('folders.spam');
@@ -64,7 +66,7 @@ Route::middleware(['auth'])->group(function () {
 Route::post('/ai-mode/toggle', function () {
     $user = auth()->user();
     $user->update([
-        'ai_mode' => ! $user->ai_mode
+        'ai_enabled' => ! $user->ai_enabled
     ]);
 
     return back();
@@ -74,7 +76,7 @@ require __DIR__.'/auth.php';
 
 Route::middleware('auth')->group(function () {
 
-    Route::get('/sms/inbox', fn () => view('sms.inbox'));
+    Route::get('/sms/inbox', [\App\Http\Controllers\SmsController::class, 'inbox'])->name('sms.inbox');
     Route::get('/sms/sent', fn () => view('sms.sent'));
     Route::get('/sms/spam', fn () => view('sms.spam'));
     Route::get('/sms/show', fn () => view('sms.show'));

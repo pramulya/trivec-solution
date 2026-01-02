@@ -25,16 +25,24 @@ return new class extends Migration
             $table->text('snippet')->nullable();
 
             // Body email (opsional, bisa null)
+            // Body email (opsional, bisa null)
             $table->longText('body')->nullable();
+            
+            // New Features (Consolidated)
+            $table->timestamp('email_date')->nullable();
+            $table->boolean('is_html')->default(false);
+            $table->string('folder')->default('inbox')->index();
+            $table->boolean('is_starred')->default(false);
 
             // Status
             $table->boolean('is_analyzed')->default(false);
 
             $table->timestamps();
+            
+            // AI Analysis Results
             $table->string('phishing_label')->nullable(); // safe, suspicious, phishing
             $table->unsignedTinyInteger('phishing_score')->nullable(); // 0–100
             $table->json('phishing_reasons')->nullable();
-            $table->boolean('is_analyzed')->default(false);
         });
     }
 

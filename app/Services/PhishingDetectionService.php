@@ -4,112 +4,94 @@ namespace App\Services;
 
 class PhishingDetectionService
 {
+    /**
+     * Analyze a single email using Python Model (Wrapper for batch with 1 item)
+     */
     public function analyze(array $email): array
     {
-        $score = 0;
-        $reasons = [];
-
-        $subject = strtolower($email['subject'] ?? '');
-        $body    = strtolower(strip_tags($email['body'] ?? ''));
-        $from    = strtolower($email['from'] ?? '');
-
-        /* =========================
-           1. URGENCY KEYWORDS
-        ========================== */
-        $urgentWords = [
-            'urgent', 'segera', 'akun anda', 'account suspended',
-            'verify now', 'click immediately', 'limited time',
-            'act now', 'security alert'
+        // Wrapper for single item -> batch
+        $results = $this->analyzeBatch([
+            ['id' => 'temp', 'body' => $email['body'] ?? '']
+        ]);
+        
+        return $results['temp'] ?? [
+            'label' => 'unknown', 
+            'score' => 0, 
+            'reasons' => ['Analysis failed']
         ];
+    }
 
-        foreach ($urgentWords as $word) {
-            if (str_contains($subject, $word) || str_contains($body, $word)) {
-                $score += 15;
-                $reasons[] = "Urgency keyword detected: {$word}";
-            }
+    /**
+     * Batch analyze using Python Model
+     * @param array $items Array of ['id' => unique_key, 'body' => string]
+     * @return array Keyed by 'id' => ['label' => ..., 'score' => ...]
+     */
+    public function analyzeBatch(array $items, string $type = 'email'): array
+    {
+        if (empty($items)) return [];
+
+        $scriptPath = base_path('python_scripts/predict.py');
+        
+        // Dynamic model selection
+        $modelName = ($type === 'sms') ? 'sms_model.pkl' : 'email_model.pkl';
+        $modelPath = storage_path("app/ai_models/{$modelName}"); 
+
+        // Use file-based IPC
+        $tempFile = storage_path('app/temp_ai_batch_' . uniqid() . '.json');
+        
+        // Ensure accurate JSON encoding
+        $jsonData = json_encode($items, JSON_THROW_ON_ERROR);
+        file_put_contents($tempFile, $jsonData);
+
+        // Absolute path based on user's traceback
+        $pythonPath = 'C:\Users\denni\AppData\Local\Programs\Python\Python313\python.exe';
+
+        $process = new \Symfony\Component\Process\Process([
+            $pythonPath, 
+            $scriptPath, 
+            '--model', 
+            $modelPath,
+            '--input-file',
+            $tempFile
+        ], null, [
+            'SystemRoot' => getenv('SystemRoot'),
+            'PATH' => getenv('PATH'),
+            'TEMP' => getenv('TEMP'),
+            'TMP' => getenv('TMP'),
+            'PYTHONIOENCODING' => 'utf-8'
+        ]);
+        
+        // TIMEOUT: Increase just in case loading libraries is slow
+        $process->setTimeout(120);
+        $process->run();
+
+        // Cleanup
+        if (file_exists($tempFile)) {
+             @unlink($tempFile);
         }
 
-        /* =========================
-           2. SUSPICIOUS LINKS
-        ========================== */
-        preg_match_all('/https?:\/\/[^\s"]+/i', $body, $matches);
-        $links = $matches[0] ?? [];
-
-        foreach ($links as $link) {
-            if (
-                str_contains($link, 'bit.ly') ||
-                str_contains($link, 'tinyurl') ||
-                str_contains($link, 'rb.gy')
-            ) {
-                $score += 20;
-                $reasons[] = "Shortened URL detected";
-            }
-
-            if (!str_contains($link, '.com') && !str_contains($link, '.id')) {
-                $score += 10;
-                $reasons[] = "Unusual domain in link";
-            }
+        if (!$process->isSuccessful()) {
+            \Log::error("Python Process Failed");
+            \Log::error("Exit Code: " . $process->getExitCode());
+            \Log::error("STDOUT: " . $process->getOutput());
+            \Log::error("STDERR: " . $process->getErrorOutput());
+            return [];
         }
 
-        /* =========================
-           3. CREDENTIAL REQUEST
-        ========================== */
-        $credentialWords = [
-            'password', 'otp', 'kode verifikasi',
-            'login', 'sign in', 'update account'
-        ];
+        $output = $process->getOutput();
+        $results = json_decode($output, true);
 
-        foreach ($credentialWords as $word) {
-            if (str_contains($body, $word)) {
-                $score += 20;
-                $reasons[] = "Credential request detected: {$word}";
-            }
+        if (!is_array($results)) {
+            \Log::error("Python Output Invalid: " . $output);
+            return [];
         }
 
-        /* =========================
-           4. SENDER DOMAIN CHECK
-        ========================== */
-        if (preg_match('/<(.+?)>/', $from, $match)) {
-            $emailAddress = $match[1];
-            $domain = substr(strrchr($emailAddress, "@"), 1);
-
-            if (
-                str_contains($subject, 'bca') && !str_contains($domain, 'bca')
-            ) {
-                $score += 25;
-                $reasons[] = "Sender domain mismatch with brand";
-            }
+        // Key by ID for easy lookup
+        $keyedResults = [];
+        foreach ($results as $res) {
+            $keyedResults[$res['id']] = $res;
         }
 
-        /* =========================
-           FINAL LABEL
-        ========================== */
-        $label = match (true) {
-            $score >= 60 => 'phishing',
-            $score >= 30 => 'suspicious',
-            $score > 0   => 'safe',
-            default      => 'unknown',
-        };
-
-        return [
-            'label'   => $label,
-            'score'   => min($score, 100),
-            'reasons' => array_unique($reasons),
-        ];
-
-        return [
-            'label' => 'phishing',        // safe | suspicious | phishing
-            'score' => 82,                // 0–100
-            'rules' => [
-                'contains_suspicious_link',
-                'urgent_language',
-                'spoofed_sender',
-            ],
-            'links' => [
-                'http://bit.ly/free-login',
-                'http://secure-update-login.com'
-            ]
-        ];
-
+        return $keyedResults;
     }
 }

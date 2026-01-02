@@ -131,8 +131,8 @@
             <form method="POST" action="{{ route('ai.toggle') }}">
                 @csrf
                 <button class="px-3 py-1 text-sm rounded
-                    {{ auth()->user()->ai_mode ? 'bg-purple-600' : 'bg-gray-600' }}">
-                    🤖 AI {{ auth()->user()->ai_mode ? 'ON' : 'OFF' }}
+                    {{ auth()->user()->ai_enabled ? 'bg-purple-600' : 'bg-gray-600' }}">
+                    🤖 AI {{ auth()->user()->ai_enabled ? 'ON' : 'OFF' }}
                 </button>
             </form>
 
