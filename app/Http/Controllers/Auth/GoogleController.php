@@ -16,6 +16,7 @@ class GoogleController extends Controller
             ->scopes([
                 'https://www.googleapis.com/auth/gmail.readonly',
                 'https://www.googleapis.com/auth/gmail.send',
+                'https://www.googleapis.com/auth/gmail.modify',
             ])
             ->with([
                 'access_type' => 'offline',

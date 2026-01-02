@@ -8,41 +8,89 @@ use Illuminate\Http\Request;
 class SmsController extends Controller
 {
     protected $detector;
+    protected $termii;
 
-    public function __construct(PhishingDetectionService $detector)
+    public function __construct(PhishingDetectionService $detector, \App\Services\TermiiService $termii)
     {
         $this->detector = $detector;
+        $this->termii = $termii;
+    }
+
+    public function sync()
+    {
+        $messages = $this->termii->fetchMessages();
+        $count = 0;
+
+        foreach ($messages as $msg) {
+            // Simple duplication check
+            $exists = \App\Models\SmsMessage::where('sender', $msg['sender'])
+                ->where('body', $msg['sms'])
+                ->exists();
+
+            if (!$exists) {
+                $sms = \App\Models\SmsMessage::create([
+                    'sender' => $msg['sender'],
+                    'body' => $msg['sms'],
+                    'source' => 'termii',
+                    'received_at' => $msg['date_created'],
+                ]);
+
+                // Trigger AI
+                if (auth()->user()->ai_enabled) {
+                    $analysis = $this->detector->analyzeBatch([
+                        ['id' => $sms->id, 'body' => $sms->body]
+                    ], 'sms');
+
+                    if (isset($analysis[$sms->id])) {
+                        $sms->update([
+                            'ai_label' => $analysis[$sms->id]['label'],
+                            'ai_score' => $analysis[$sms->id]['score']
+                        ]);
+                    }
+                }
+                $count++;
+            }
+        }
+
+        return back()->with('success', "Synced {$count} messages from Termii");
     }
 
     public function inbox()
     {
-        // 1. Define the "Fake" SMS Data (Backend Source)
-        $messages = [
-            ['id' => 'sms_1', 'from' => '+628123456789', 'text' => 'OTP Anda adalah 123456', 'time' => '10:21'],
-            ['id' => 'sms_2', 'from' => 'Bank XYZ', 'text' => 'Transaksi Rp1.200.000 berhasil', 'time' => '09:10'],
-            ['id' => 'sms_3', 'from' => 'Promo', 'text' => 'Diskon besar! Klik link sekarang http://bit.ly/scam', 'time' => 'Kemarin'],
-            ['id' => 'sms_4', 'from' => 'Unknown', 'text' => 'You have won a lottery! Claim at http://phishing.com', 'time' => '2 days ago'],
-            ['id' => 'sms_5', 'from' => 'Mom', 'text' => 'Please buy some eggs', 'time' => '3 days ago'],
-        ];
+        // Fetch from DB
+        $messages = \App\Models\SmsMessage::latest('received_at')->get();
+        return view('sms.inbox', compact('messages'));
+    }
 
-        // 2. Format for AI (needs id and body)
-        $aiInput = array_map(function($msg) {
-            return ['id' => $msg['id'], 'body' => $msg['text']];
-        }, $messages);
+    public function store(Request $request) 
+    {
+        $data = $request->validate([
+            'sender' => 'required|string',
+            'body' => 'required|string',
+        ]);
 
-        // 3. Analyze using the SMS Model
-        // We need to tell the service to use 'sms_model.pkl'. 
-        // Currently analyzeBatch uses 'email_model.pkl' hardcoded.
-        // We will update the Service to accept a model type.
-        $results = $this->detector->analyzeBatch($aiInput, 'sms');
+        // 1. Create Record
+        $sms = \App\Models\SmsMessage::create([
+            'sender' => $data['sender'],
+            'body' => $data['body'],
+            'source' => 'manual',
+            'received_at' => now(),
+        ]);
 
-        // 4. Merge results back into messages
-        foreach ($messages as &$msg) {
-            if (isset($results[$msg['id']])) {
-                $msg['analysis'] = $results[$msg['id']];
+        // 2. Trigger AI Analysis (only if enabled)
+        if (auth()->user()->ai_enabled) {
+            $analysis = $this->detector->analyzeBatch([
+                ['id' => $sms->id, 'body' => $sms->body]
+            ], 'sms'); // Use SMS Model
+
+            if (isset($analysis[$sms->id])) {
+                $sms->update([
+                    'ai_label' => $analysis[$sms->id]['label'],
+                    'ai_score' => $analysis[$sms->id]['score']
+                ]);
             }
         }
 
-        return view('sms.inbox', compact('messages'));
+        return back()->with('success', 'Message added and analyzed!');
     }
 }

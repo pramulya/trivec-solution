@@ -53,13 +53,14 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/drafts', [InboxController::class, 'drafts'])->name('drafts.index');
 
-    Route::get('/spam', function () {
-        return view('folders.spam');
-    })->name('spam.index');
+    Route::get('/spam', [\App\Http\Controllers\InboxController::class, 'spam'])->name('spam.index');
+    Route::post('/inbox/{message}/spam', [\App\Http\Controllers\InboxController::class, 'markAsSpam'])->name('inbox.spam');
+    Route::delete('/inbox/{message}', [\App\Http\Controllers\InboxController::class, 'destroy'])->name('inbox.destroy');
 
-    Route::get('/trash', function () {
-        return view('folders.trash');
-    })->name('trash.index');
+    Route::get('/compose', [\App\Http\Controllers\ComposeController::class, 'index'])->name('compose.index');
+    Route::post('/send-email', [\App\Http\Controllers\ComposeController::class, 'send'])->name('compose.send');
+
+    Route::get('/trash', [\App\Http\Controllers\InboxController::class, 'trash'])->name('trash.index');
 
 });
 
@@ -77,6 +78,8 @@ require __DIR__.'/auth.php';
 Route::middleware('auth')->group(function () {
 
     Route::get('/sms/inbox', [\App\Http\Controllers\SmsController::class, 'inbox'])->name('sms.inbox');
+    Route::post('/sms/store', [\App\Http\Controllers\SmsController::class, 'store'])->name('sms.store');
+    Route::post('/sms/sync-termii', [\App\Http\Controllers\SmsController::class, 'sync'])->name('sms.sync.termii');
     Route::get('/sms/sent', fn () => view('sms.sent'));
     Route::get('/sms/spam', fn () => view('sms.spam'));
     Route::get('/sms/show', fn () => view('sms.show'));

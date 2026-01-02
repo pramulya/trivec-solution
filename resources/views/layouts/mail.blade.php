@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Trivec Mail</title>
-    @vite(['resources/css/app.css'])
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="bg-gray-900 text-gray-200">
@@ -19,6 +19,12 @@
 
         {{-- FOLDERS --}}
         <nav class="mt-3 text-sm flex-1 overflow-y-auto">
+
+            <div class="px-3 mb-4">
+                <a href="{{ route('compose.index') }}" class="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded shadow-lg font-medium transition">
+                    + Compose
+                </a>
+            </div>
 
             {{-- MAILBOXES --}}
             <div class="px-3 text-xs uppercase text-gray-500 mb-2">
