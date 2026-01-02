@@ -18,64 +18,76 @@
         </div>
 
         {{-- FOLDERS --}}
-        <nav class="mt-3 text-sm flex-1">
+        <nav class="mt-3 text-sm flex-1 overflow-y-auto">
 
-            {{-- PRIMARY --}}
+            {{-- MAILBOXES --}}
             <div class="px-3 text-xs uppercase text-gray-500 mb-2">
                 Mailboxes
             </div>
 
             <a href="/inbox"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition
-               {{ request()->is('inbox*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
-                <span class="flex items-center gap-2">
-                    📥 Inbox
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('inbox*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                📥 Inbox
             </a>
 
             <a href="/drafts"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
-                <span class="flex items-center gap-2">
-                    📝 Drafts
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
+                📝 Drafts
             </a>
 
             <a href="/sent"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition
-               {{ request()->is('sent*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
-                <span class="flex items-center gap-2">
-                    📤 Sent
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('sent*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                📤 Sent
             </a>
 
             <a href="/starred"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition
-               {{ request()->is('starred*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
-                <span class="flex items-center gap-2">
-                    ⭐ Starred
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('starred*') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                ⭐ Starred
+            </a>
+
+            {{-- SMS SECTION --}}
+            <div class="px-3 mt-5 text-xs uppercase text-gray-500 mb-2">
+                SMS
+            </div>
+
+            <a href="/sms/inbox"
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('sms/inbox') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                📩 SMS Inbox
+            </a>
+
+            <a href="/sms/sent"
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('sms/sent') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                📤 SMS Sent
+            </a>
+
+            <a href="/sms/spam"
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition
+            {{ request()->is('sms/spam') ? 'bg-gray-700 text-white' : 'text-gray-300' }}">
+                🚨 SMS Spam
             </a>
 
             {{-- SECURITY --}}
-            <div class="px-3 mt-4 text-xs uppercase text-gray-500 mb-2">
+            <div class="px-3 mt-5 text-xs uppercase text-gray-500 mb-2">
                 Security
             </div>
 
             <a href="/spam"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
-                <span class="flex items-center gap-2">
-                    🚨 Spam
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
+                🚫 Spam
             </a>
 
             <a href="/trash"
-               class="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
-                <span class="flex items-center gap-2">
-                    🗑 Trash
-                </span>
+            class="flex items-center gap-2 px-4 py-2 rounded hover:bg-gray-700 transition text-gray-300">
+                🗑 Trash
             </a>
 
         </nav>
+
 
         {{-- FOOTER --}}
         <div class="p-3 text-xs text-gray-500 border-t border-gray-700">
