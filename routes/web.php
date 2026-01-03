@@ -37,37 +37,52 @@ Route::middleware('auth')->group(function () {
     Route::get('/inbox/{message}', [InboxController::class, 'show'])
         ->name('inbox.show');
 
-    // Sync Gmail
+    Route::post('/inbox/{message}/star', [InboxController::class, 'toggleStar'])
+        ->name('inbox.star');
+
+    // Folders
     Route::post('/gmail/sync', [InboxController::class, 'sync'])
         ->name('gmail.sync');
 
     Route::get('/sent', [InboxController::class, 'sent'])->name('sent');
     Route::get('/starred', [InboxController::class, 'starred'])->name('starred');
+    Route::get('/drafts', [InboxController::class, 'drafts'])->name('drafts.index');
 });
 
 Route::middleware(['auth'])->group(function () {
 
-    Route::get('/drafts', function () {
-        return view('folders.drafts');
-    })->name('drafts.index');
+    Route::get('/drafts', [InboxController::class, 'drafts'])->name('drafts.index');
 
-    Route::get('/spam', function () {
-        return view('folders.spam');
-    })->name('spam.index');
+    Route::get('/spam', [\App\Http\Controllers\InboxController::class, 'spam'])->name('spam.index');
+    Route::post('/inbox/{message}/spam', [\App\Http\Controllers\InboxController::class, 'markAsSpam'])->name('inbox.spam');
+    Route::delete('/inbox/{message}', [\App\Http\Controllers\InboxController::class, 'destroy'])->name('inbox.destroy');
 
-    Route::get('/trash', function () {
-        return view('folders.trash');
-    })->name('trash.index');
+    Route::get('/compose', [\App\Http\Controllers\ComposeController::class, 'index'])->name('compose.index');
+    Route::post('/send-email', [\App\Http\Controllers\ComposeController::class, 'send'])->name('compose.send');
+
+    Route::get('/trash', [\App\Http\Controllers\InboxController::class, 'trash'])->name('trash.index');
 
 });
 
 Route::post('/ai-mode/toggle', function () {
     $user = auth()->user();
     $user->update([
-        'ai_mode' => ! $user->ai_mode
+        'ai_enabled' => ! $user->ai_enabled
     ]);
 
     return back();
 })->middleware('auth')->name('ai.toggle');
 
 require __DIR__.'/auth.php';
+
+Route::middleware('auth')->group(function () {
+
+    Route::get('/sms/inbox', [\App\Http\Controllers\SmsController::class, 'inbox'])->name('sms.inbox');
+    Route::post('/sms/send', [\App\Http\Controllers\SmsController::class, 'send'])->name('sms.send');
+    Route::post('/sms/store', [\App\Http\Controllers\SmsController::class, 'store'])->name('sms.store');
+    Route::post('/sms/sync-termii', [\App\Http\Controllers\SmsController::class, 'sync'])->name('sms.sync.termii');
+    Route::get('/sms/sent', [\App\Http\Controllers\SmsController::class, 'sent'])->name('sms.sent');
+    Route::get('/sms/spam', [\App\Http\Controllers\SmsController::class, 'spam'])->name('sms.spam');
+    Route::get('/sms/show', fn () => view('sms.show'));
+
+});

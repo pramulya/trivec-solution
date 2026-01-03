@@ -60,14 +60,21 @@ class GmailService
     /* =====================
         FETCH INBOX
     ===================== */
-    public function fetchInbox(int $limit = 1000): array
+    /* =====================
+        FETCH MESSAGES (BY LABEL)
+    ===================== */
+    public function fetchMessages(string $labelId = 'INBOX', int $limit = 50): array
     {
         $messages = [];
         $pageToken = null;
 
+        // Use smaller batch size for better performance
+        $batchSize = min($limit, 50);
+
         do {
             $params = [
-                'maxResults' => 500, // batas aman Gmail
+                'maxResults' => $batchSize,
+                'labelIds'   => [$labelId],
             ];
 
             if ($pageToken) {
@@ -107,39 +114,145 @@ class GmailService
 
         $payload = $message->getPayload();
         $headers = collect($payload->getHeaders());
+        $labelIds = $message->getLabelIds() ?? [];
+
+        $bodyData = $this->extractBody($payload);
 
         return [
-            'subject' => optional($headers->firstWhere('name', 'Subject'))->getValue(),
-            'from'    => optional($headers->firstWhere('name', 'From'))->getValue(),
-            'date'    => optional($headers->firstWhere('name', 'Date'))->getValue(),
-            'snippet' => $message->getSnippet(),
-            'body'    => $this->extractBody($payload),
+            'subject'  => optional($headers->firstWhere('name', 'Subject'))->getValue(),
+            'from'     => optional($headers->firstWhere('name', 'From'))->getValue(),
+            'date'     => optional($headers->firstWhere('name', 'Date'))->getValue(),
+            'snippet'  => $message->getSnippet(),
+            'labelIds' => $labelIds,
+            'body'     => $bodyData['body'],
+            'is_html'  => $bodyData['is_html'],
         ];
     }
 
     /* =====================
-        BODY PARSER (FULL)
+        BODY PARSER (FULL) - Prioritizes HTML over plain text
     ===================== */
-    private function extractBody($payload): string
+    private function extractBody($payload): array
     {
-        // 1️⃣ Direct body
-        if ($payload->getBody() && $payload->getBody()->getData()) {
-            return $this->decode($payload->getBody()->getData());
-        }
+        $htmlBody = '';
+        $textBody = '';
 
-        // 2️⃣ Multipart (recursive)
-        foreach ($payload->getParts() ?? [] as $part) {
-            $result = $this->extractBody($part);
-            if (!empty($result)) {
-                return $result;
+        // 1️⃣ Direct body (single part message)
+        if ($payload->getBody() && $payload->getBody()->getData()) {
+            $mimeType = $payload->getMimeType();
+            $body = $this->decode($payload->getBody()->getData());
+            
+            if ($mimeType === 'text/html') {
+                $htmlBody = $body;
+            } else {
+                $textBody = $body;
             }
         }
 
-        return '';
+        // 2️⃣ Multipart (recursive)
+        if ($payload->getParts()) {
+            foreach ($payload->getParts() as $part) {
+                $mimeType = $part->getMimeType();
+                
+                if ($mimeType === 'text/html') {
+                    if ($part->getBody() && $part->getBody()->getData()) {
+                        $htmlBody = $this->decode($part->getBody()->getData());
+                    }
+                } elseif ($mimeType === 'text/plain') {
+                    if ($part->getBody() && $part->getBody()->getData()) {
+                        $textBody = $this->decode($part->getBody()->getData());
+                    }
+                } elseif (str_starts_with($mimeType, 'multipart/')) {
+                    // Recursively check nested multipart
+                    $nested = $this->extractBody($part);
+                    if (!empty($nested['body'])) {
+                        if ($nested['is_html']) {
+                            $htmlBody = $nested['body'];
+                        } else {
+                            $textBody = $nested['body'];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Prioritize HTML, fallback to plain text
+        if (!empty($htmlBody)) {
+            return ['body' => $htmlBody, 'is_html' => true];
+        } elseif (!empty($textBody)) {
+            return ['body' => $textBody, 'is_html' => false];
+        }
+
+        return ['body' => '', 'is_html' => false];
     }
 
     private function decode(string $data): string
     {
         return base64_decode(str_replace(['-', '_'], ['+', '/'], $data));
+    }
+
+    /* =====================
+        TOGGLE STAR
+    ===================== */
+    public function toggleStar(string $gmailMessageId, bool $star): void
+    {
+        $mods = new \Google_Service_Gmail_ModifyMessageRequest();
+        
+        if ($star) {
+            $mods->setAddLabelIds(['STARRED']);
+            $mods->setRemoveLabelIds([]);
+        } else {
+            $mods->setAddLabelIds([]);
+            $mods->setRemoveLabelIds(['STARRED']);
+        }
+
+        $this->service->users_messages->modify('me', $gmailMessageId, $mods);
+    }
+
+    /* =====================
+        SEND EMAIL
+    ===================== */
+    public function sendEmail(string $to, string $subject, string $body)
+    {
+        $strSubject = 'Subject: ' . $subject . "\r\n";
+        $strTo = 'To: ' . $to . "\r\n";
+        $strContentType = 'Content-Type: text/html; charset=utf-8' . "\r\n";
+        $strMimeVersion = 'MIME-Version: 1.0' . "\r\n";
+        
+        // Combine headers and body
+        $strRawMessage = $strSubject . $strTo . $strContentType . $strMimeVersion . "\r\n" . $body;
+
+        // Base64URL Encode (Required by Gmail API)
+        $base64Message = rtrim(strtr(base64_encode($strRawMessage), '+/', '-_'), '=');
+
+        $msg = new \Google_Service_Gmail_Message();
+        $msg->setRaw($base64Message);
+
+        return $this->service->users_messages->send('me', $msg);
+    }
+
+    /* =====================
+        TRASH / UNTRASH
+    ===================== */
+    public function trashMessage(string $id)
+    {
+        return $this->service->users_messages->trash('me', $id);
+    }
+
+    public function untrashMessage(string $id)
+    {
+        return $this->service->users_messages->untrash('me', $id);
+    }
+
+    /* =====================
+        MODIFY LABELS (For Spam)
+    ===================== */
+    public function modifyLabels(string $id, array $add = [], array $remove = [])
+    {
+        $mods = new \Google_Service_Gmail_ModifyMessageRequest();
+        $mods->setAddLabelIds($add);
+        $mods->setRemoveLabelIds($remove);
+
+        return $this->service->users_messages->modify('me', $id, $mods);
     }
 }

@@ -111,11 +111,24 @@
                         </li>
                     </ul>
                     <ul class="flex gap-3 text-sm leading-normal">
-                        <li>
-                            <a href="https://cloud.laravel.com" target="_blank" class="inline-block dark:bg-[#eeeeec] dark:border-[#eeeeec] dark:text-[#1C1C1A] dark:hover:bg-white dark:hover:border-white hover:bg-black hover:border-black px-5 py-1.5 bg-[#1b1b18] rounded-sm border border-black text-white text-sm leading-normal">
-                                Deploy now
-                            </a>
-                        </li>
+                        @auth
+                            <li>
+                                <a href="{{ url('/dashboard') }}" class="inline-block px-5 py-1.5 bg-[#1b1b18] dark:bg-[#EDEDEC] text-white dark:text-[#1b1b18] rounded-sm border border-transparent hover:opacity-90 transition text-sm leading-normal font-medium">
+                                    Go to Dashboard
+                                </a>
+                            </li>
+                        @else
+                            <li>
+                                <a href="{{ route('register') }}" class="inline-block px-5 py-1.5 bg-[#F53003] text-white rounded-sm border border-transparent hover:bg-[#D92802] transition text-sm leading-normal font-medium shadow-md">
+                                    Create Account
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ route('login') }}" class="inline-block px-5 py-1.5 bg-white dark:bg-[#161615] border border-[#e3e3e0] dark:border-[#3E3E3A] text-[#1b1b18] dark:text-[#EDEDEC] rounded-sm hover:border-[#19140035] dark:hover:border-[#62605b] transition text-sm leading-normal font-medium">
+                                    Log in
+                                </a>
+                            </li>
+                        @endauth
                     </ul>
                 </div>
                 <div class="bg-[#fff2f2] dark:bg-[#1D0002] relative lg:-ml-px -mb-px lg:mb-0 rounded-t-lg lg:rounded-t-none lg:rounded-r-lg aspect-[335/376] lg:aspect-auto w-full lg:w-[438px] shrink-0 overflow-hidden">

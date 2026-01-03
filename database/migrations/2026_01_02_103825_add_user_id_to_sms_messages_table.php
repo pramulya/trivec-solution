@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
-            $table->json('phishing_rules')->nullable(); // rules triggered
+        Schema::table('sms_messages', function (Blueprint $table) {
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
         });
     }
 
@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
+        Schema::table('sms_messages', function (Blueprint $table) {
             //
         });
     }

@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->boolean('ai_enabled')->default(true);
+        Schema::table('sms_messages', function (Blueprint $table) {
+            $table->string('direction')->default('inbound')->index(); // inbound, outbound
         });
     }
 
@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
+        Schema::table('sms_messages', function (Blueprint $table) {
             //
         });
     }
