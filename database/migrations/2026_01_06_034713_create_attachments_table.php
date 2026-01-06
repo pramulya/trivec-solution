@@ -19,9 +19,10 @@ return new class extends Migration
             // Wait, looking at current code, there is no local 'messages' table, it's all API.
             // So we just index the gmail message id.
             $table->string('message_id')->index(); 
-            $table->string('attachment_id')->nullable(); // Gmail attachment ID
+            $table->text('attachment_id')->nullable(); // Gmail attachment ID (changed to text)
             $table->string('filename');
             $table->string('mime_type')->nullable();
+            $table->string('content_id')->nullable()->index();
             $table->string('path'); // Local secure path
             $table->unsignedBigInteger('size')->nullable();
             $table->timestamps();

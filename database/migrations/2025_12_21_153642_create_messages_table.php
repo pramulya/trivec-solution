@@ -29,15 +29,16 @@ return new class extends Migration
             $table->longText('body')->nullable();
             
             // New Features (Consolidated)
-            $table->timestamp('email_date')->nullable();
+            $table->timestamp('email_date')->nullable()->index();
             $table->boolean('is_html')->default(false);
             $table->string('folder')->default('inbox')->index();
-            $table->boolean('is_starred')->default(false);
+            $table->boolean('is_starred')->default(false)->index();
 
             // Status
             $table->boolean('is_analyzed')->default(false);
 
             $table->timestamps();
+            $table->index('created_at');
             
             // AI Analysis Results
             $table->string('phishing_label')->nullable(); // safe, suspicious, phishing

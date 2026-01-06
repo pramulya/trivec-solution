@@ -23,6 +23,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/', fn() => redirect('/inbox'));
 
+    // Phone Setup
+    Route::get('/setup-phone', [\App\Http\Controllers\Auth\PhoneSetupController::class, 'create'])->name('phone.setup');
+    Route::post('/setup-phone', [\App\Http\Controllers\Auth\PhoneSetupController::class, 'store'])->name('phone.store');
+
     // Gmail OAuth
     Route::get('/auth/google', [GoogleController::class, 'redirect'])
         ->name('google.redirect');

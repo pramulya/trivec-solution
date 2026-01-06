@@ -194,8 +194,11 @@
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 // Only intercept if we are already in the "Mail Dashboard" context (app element exists)
+                // AND we are NOT in the SMS section (which requires a full reload to switch back to Mail)
                 const app = document.getElementById('app');
-                if (app) {
+                const isSmsPage = window.location.pathname.startsWith('/sms');
+
+                if (app && !isSmsPage) {
                     e.preventDefault();
                     
                     const folder = link.dataset.folder;

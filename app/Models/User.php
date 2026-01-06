@@ -26,6 +26,7 @@ class User extends Authenticatable
         'google_refresh_token',
         'gmail_connected_at',
         'ai_enabled',
+        'phone_number',
     ];
 
     /**

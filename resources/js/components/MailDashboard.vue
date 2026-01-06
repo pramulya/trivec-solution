@@ -162,7 +162,7 @@ const determineFolderFromUrl = () => {
 const fetchMessages = async (url = null) => {
     // Check Cache First
     if (url && pageCache.has(url)) {
-        console.log('Using cached page:', url);
+        // console.log('Using cached page:', url);
         applyData(pageCache.get(url));
         return;
     }
@@ -204,7 +204,7 @@ const prefetchPage = async (url) => {
     // Tiny delay to let main thread render first
     setTimeout(async () => {
         try {
-            console.log('Prefetching:', url);
+            // console.log('Prefetching:', url);
             const response = await axios.get(url);
             pageCache.set(url, response.data);
         } catch (e) {
@@ -277,7 +277,7 @@ const formatSize = (bytes) => {
 // --- BACKGROUND SYNC CRAWLER ---
 const syncHistory = async (token = null) => {
     try {
-        console.log('[Trivec] Syncing history...', token ? '(Next Page)' : '(Start)');
+        // console.log('[Trivec] Syncing history...', token ? '(Next Page)' : '(Start)');
         
         // Use a separate endpoint or just params on the sync endpoint
         const response = await axios.post('/gmail/sync', {
@@ -293,19 +293,17 @@ const syncHistory = async (token = null) => {
             // Or just let them appear on next navigation/pagination. 
             // For now, let's just log it. Live updates might be too jumpy.
             if (count > 0) {
-                console.log(`[Trivec] Synced ${count} messages.`);
+                // console.log(`[Trivec] Synced ${count} messages.`);
                 // Optional: If we are on page 1 and list is short, refresh?
                 // if (pagination.current_page === 1 && messages.value.length < 50) fetchMessages();
             }
 
-            // RECURSIVE CRAWL
-            // Be careful not to infinite loop if Gmail has millions. 
-            // Maybe limit to 10 pages for now or check if component is unmounted.
-            if (nextToken) {
-                setTimeout(() => syncHistory(nextToken), 2000); // 2s delay between pages
-            } else {
-                console.log('[Trivec] History sync complete.');
-            }
+            // RECURSIVE CRAWL - DISABLED per user request (Only fetch first 50)
+            // if (nextToken) {
+            //    setTimeout(() => syncHistory(nextToken), 2000); 
+            // } else {
+            //    // console.log('[Trivec] History sync complete.');
+            // }
         }
     } catch (e) {
         console.warn('[Trivec] Sync paused/failed', e);
@@ -326,7 +324,7 @@ onMounted(() => {
         }
     });
 
-    // START CRAWLER after a short delay
+    // START CRAWLER (First 50 only)
     setTimeout(() => syncHistory(), 3000);
 });
 

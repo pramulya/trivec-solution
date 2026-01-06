@@ -2,24 +2,23 @@
     <div class="bg-gray-900 text-gray-200 flex flex-col h-full">
         <!-- Toolbar & Search -->
         <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-900">
-            <h1 class="text-xl font-semibold text-white">SMS Dashboard</h1>
+            <!-- Search -->
+            <div class="relative">
+                <input 
+                    v-model="searchQuery" 
+                    type="text" 
+                    placeholder="Search..." 
+                    class="pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500 w-48"
+                >
+                <svg class="w-4 h-4 text-gray-500 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
 
             <div class="flex items-center gap-4">
-                <!-- Search -->
-                <div class="relative">
-                    <input 
-                        v-model="searchQuery" 
-                        type="text" 
-                        placeholder="Search..." 
-                        class="pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500 w-48"
-                    >
-                    <svg class="w-4 h-4 text-gray-500 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                    </svg>
-                </div>
-
                 <!-- Sync Termii -->
                 <button 
+                    v-if="currentFolder === 'inbox'"
                     @click="syncTermii" 
                     :disabled="isSyncing"
                     class="text-gray-400 hover:text-white text-sm flex items-center gap-1 disabled:opacity-50"
@@ -39,31 +38,6 @@
                     + Simulate
                 </button>
             </div>
-        </div>
-
-        <!-- Folder Tabs -->
-        <div class="px-6 border-b border-gray-700 bg-gray-900 flex gap-6 text-sm font-medium">
-            <button 
-                @click="switchFolder('inbox')"
-                class="py-3 border-b-2 transition-colors"
-                :class="currentFolder === 'inbox' ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-200'"
-            >
-                Inbox
-            </button>
-            <button 
-                @click="switchFolder('sent')"
-                class="py-3 border-b-2 transition-colors"
-                :class="currentFolder === 'sent' ? 'border-green-500 text-green-400' : 'border-transparent text-gray-400 hover:text-gray-200'"
-            >
-                Sent
-            </button>
-            <button 
-                @click="switchFolder('spam')"
-                class="py-3 border-b-2 transition-colors"
-                :class="currentFolder === 'spam' ? 'border-red-500 text-red-400' : 'border-transparent text-gray-400 hover:text-gray-200'"
-            >
-                Spam
-            </button>
         </div>
 
         <!-- Message List -->
@@ -91,7 +65,7 @@
                               class="px-2 py-0.5 rounded text-xs font-bold uppercase"
                               :class="getLabelColor(message.ai_label)"
                         >
-                            {{ message.ai_label }} ({{ (message.ai_score * 100).toFixed(0) }}%)
+                            {{ message.ai_label }} ({{ Number(message.ai_score).toFixed(0) }}%)
                         </span>
 
                         <!-- Source Badge -->
@@ -193,12 +167,16 @@ const props = defineProps({
     initialMessages: {
         type: Array,
         default: () => []
+    },
+    folder: {
+        type: String,
+        default: 'inbox'
     }
 });
 
 const messages = ref(props.initialMessages);
 const searchQuery = ref('');
-const currentFolder = ref('inbox');
+const currentFolder = ref(props.folder);
 const loading = ref(false);
 
 // Loading States

@@ -197,6 +197,52 @@ class SmsController extends Controller
         return back()->with('success', 'SMS deleted');
     }
 
+    public function handleWebhook(Request $request)
+    {
+        // 1. Validate (Loosely, to accept Termii's format)
+        // Termii payload: { "sender": "...", "receiver": "...", "message": "...", ... }
+        $data = $request->validate([
+            'sender' => 'required|string',
+            'receiver' => 'required|string',
+            'message' => 'required|string',
+        ]);
+
+        // 2. Find User by their "Virtual Number" (receiver)
+        // We match match the incoming 'receiver' (e.g., 628123...) with the user's saved 'phone_number'.
+        $user = \App\Models\User::where('phone_number', $data['receiver'])->first();
+
+        if (!$user) {
+            \Log::warning("Incoming SMS for unknown receiver: " . $data['receiver']);
+            return response()->json(['message' => 'User not found'], 200); // 200 to satisfy webhook
+        }
+
+        // 3. Store Message
+        $sms = \App\Models\SmsMessage::create([
+            'user_id' => $user->id,
+            'sender' => $data['sender'],     // The customer who sent the SMS
+            'body' => $data['message'],
+            'direction' => 'inbound',
+            'source' => 'termii',
+            'received_at' => now(),
+        ]);
+
+        // 4. Trigger AI Analysis
+        if ($user->ai_enabled) {
+            $analysis = $this->detector->analyzeBatch([
+                ['id' => $sms->id, 'body' => $sms->body]
+            ], 'sms');
+
+            if (isset($analysis[$sms->id])) {
+                $sms->update([
+                    'ai_label' => $analysis[$sms->id]['label'],
+                    'ai_score' => $analysis[$sms->id]['score']
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'Received']);
+    }
+
     public function markAsSpam(\App\Models\SmsMessage $sms) 
     {
         abort_if($sms->user_id !== auth()->id(), 403);
