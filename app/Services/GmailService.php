@@ -63,40 +63,36 @@ class GmailService
     /* =====================
         FETCH MESSAGES (BY LABEL)
     ===================== */
-    public function fetchMessages(string $labelId = 'INBOX', int $limit = 50): array
+    public function fetchMessages(string $labelId = 'INBOX', int $limit = 50, ?string $pageToken = null): array
     {
         $messages = [];
-        $pageToken = null;
+        $nextPageToken = null;
 
-        // Use smaller batch size for better performance
-        $batchSize = min($limit, 50);
+        $params = [
+            'maxResults' => $limit,
+            'labelIds'   => [$labelId],
+        ];
 
-        do {
-            $params = [
-                'maxResults' => $batchSize,
-                'labelIds'   => [$labelId],
-            ];
+        if ($pageToken) {
+            $params['pageToken'] = $pageToken;
+        }
 
-            if ($pageToken) {
-                $params['pageToken'] = $pageToken;
-            }
-
+        try {
             $response = $this->service->users_messages->listUsersMessages('me', $params);
 
             if ($response->getMessages()) {
-                $messages = array_merge($messages, $response->getMessages());
+                $messages = $response->getMessages();
             }
 
-            $pageToken = $response->getNextPageToken();
+            $nextPageToken = $response->getNextPageToken();
+        } catch (\Exception $e) {
+            // Log error or just return empty if failed
+        }
 
-            // stop kalau sudah cukup banyak
-            if (count($messages) >= $limit) {
-                break;
-            }
-
-        } while ($pageToken);
-
-        return array_slice($messages, 0, $limit);
+        return [
+            'messages' => $messages,
+            'nextPageToken' => $nextPageToken
+        ];
     }
 
 

@@ -84,5 +84,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/sms/sent', [\App\Http\Controllers\SmsController::class, 'sent'])->name('sms.sent');
     Route::get('/sms/spam', [\App\Http\Controllers\SmsController::class, 'spam'])->name('sms.spam');
     Route::get('/sms/show', fn () => view('sms.show'));
+    Route::delete('/sms/{sms}', [\App\Http\Controllers\SmsController::class, 'destroy'])->name('sms.destroy');
+    Route::post('/sms/{sms}/spam', [\App\Http\Controllers\SmsController::class, 'markAsSpam'])->name('sms.spam.mark');
 
 });
