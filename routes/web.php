@@ -39,6 +39,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/inbox/{message}/star', [InboxController::class, 'toggleStar'])
         ->name('inbox.star');
+    
+    // Attachments
+    Route::get('/attachments/{id}', [InboxController::class, 'downloadAttachment'])
+        ->name('attachments.download');
 
     // Folders
     Route::post('/gmail/sync', [InboxController::class, 'sync'])

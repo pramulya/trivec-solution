@@ -152,6 +152,22 @@ class InboxController extends Controller
         ];
     }
     
+    public function show(Message $message)
+    {
+        abort_if($message->user_id !== auth()->id(), 403);
+        
+        $message->load('attachments');
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'message' => $message,
+                'formatted_date' => $message->email_date->format('M d, Y h:i A')
+            ]);
+        }
+        
+        return view('inbox.show', compact('message'));
+    }
+
     public function index()
     {
         $messages = Message::where('user_id', auth()->id())
@@ -164,6 +180,23 @@ class InboxController extends Controller
             return response()->json($messages);
         }
         return view('inbox.index', compact('messages'));
+    }
+
+    public function downloadAttachment($id)
+    {
+        $attachment = \App\Models\Attachment::findOrFail($id);
+        $message = Message::where('gmail_message_id', $attachment->message_id)->first();
+
+        // Security Check: Ensure user owns the message
+        if (!$message || $message->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        if (!\Storage::exists($attachment->path)) {
+            abort(404, 'File not found on server');
+        }
+
+        return \Storage::download($attachment->path, $attachment->filename);
     }
 
     public function drafts()

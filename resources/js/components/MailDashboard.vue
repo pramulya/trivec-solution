@@ -79,6 +79,34 @@
                         </div>
                     </div>
 
+                    <!-- Risk Score Banner -->
+                    <div class="mb-6 px-4 py-3 border border-gray-700 rounded bg-gray-800/50 flex items-center gap-4">
+                        <div class="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider text-white" 
+                             :class="getStatusColor(selectedMessage)">
+                            {{ selectedMessage.phishing_label || 'Unknown' }}
+                        </div>
+                        <div class="text-gray-400 text-sm">
+                            Risk Score: <span class="text-gray-200 font-semibold">{{ selectedMessage.phishing_score ?? 'N/A' }}/100</span>
+                        </div>
+                    </div>
+
+                    <!-- Attachments -->
+                    <div v-if="selectedMessage.attachments && selectedMessage.attachments.length > 0" class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-400 mb-2">Attachments</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <a v-for="att in selectedMessage.attachments" 
+                               :key="att.id"
+                               :href="`/attachments/${att.id}`"
+                               target="_blank"
+                               class="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-blue-400 hover:text-blue-300 hover:border-gray-600 transition"
+                            >
+                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                               {{ att.filename }} 
+                               <span class="text-gray-500 text-xs">({{ formatSize(att.size) }})</span>
+                            </a>
+                        </div>
+                    </div>
+
                     <!-- Email Body Container (Paper View with Iframe Isolation) -->
                     <div class="bg-white text-black">
                         <!-- IFRAME ISOLATION: Ensures native browser styling for emails -->
@@ -225,9 +253,10 @@ const openMessage = async (message) => {
 };
 
 const getStatusColor = (message) => {
-    if (message.phishing_label === 'safe') return 'bg-green-500';
-    if (message.phishing_label === 'suspicious') return 'bg-yellow-400';
-    if (message.phishing_label === 'phishing') return 'bg-red-500';
+    const label = (message.phishing_label || '').toLowerCase();
+    if (label === 'safe') return 'bg-green-500';
+    if (label === 'suspicious') return 'bg-yellow-400';
+    if (label === 'phishing') return 'bg-red-500';
     return 'bg-gray-500'; 
 };
 
@@ -235,6 +264,14 @@ const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+const formatSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 // --- BACKGROUND SYNC CRAWLER ---

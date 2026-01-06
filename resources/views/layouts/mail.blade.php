@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trivec Mail</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     {{-- Preloading Critical Routes --}}
@@ -11,15 +12,33 @@
     <link rel="prefetch" href="{{ route('compose.index') }}">
 </head>
 
-<body class="bg-gray-900 text-gray-200">
-<div class="flex min-h-screen">
+<body class="bg-gray-900 text-gray-200" x-data="{ mobileMenuOpen: false }">
+<div class="flex min-h-screen relative">
+
+    {{-- MOBILE OVERLAY --}}
+    <div x-show="mobileMenuOpen" 
+         x-transition:enter="transition-opacity ease-linear duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-linear duration-300"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="mobileMenuOpen = false"
+         class="fixed inset-0 bg-gray-900/80 z-20 md:hidden" 
+         style="display: none;">
+    </div>
 
     {{-- SIDEBAR --}}
-    <aside class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+    <aside :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'"
+           class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-800 border-r border-gray-700 flex flex-col transition-transform duration-300 md:translate-x-0 md:static md:min-h-screen">
 
         {{-- LOGO --}}
-        <div class="p-4 text-lg font-semibold tracking-wide border-b border-gray-700">
-            Trivec Mail
+        <div class="p-4 text-lg font-semibold tracking-wide border-b border-gray-700 flex justify-between items-center">
+            <span>Trivec Mail</span>
+            {{-- Close Button (Mobile) --}}
+            <button @click="mobileMenuOpen = false" class="md:hidden text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
         </div>
 
         {{-- FOLDERS --}}
@@ -103,49 +122,63 @@
     </aside>
 
     {{-- MAIN --}}
-    <main class="flex-1 flex flex-col">
+    <main class="flex-1 flex flex-col min-w-0">
 
         {{-- TOP BAR --}}
-        <header class="bg-gray-900 border-b border-gray-700 px-6 py-3 flex justify-between items-center">
-            <h2 class="text-lg font-semibold text-gray-100 truncate">
-                @yield('title')
-            </h2>
+        <header class="bg-gray-900 border-b border-gray-700 px-4 md:px-6 py-3 flex justify-between items-center sticky top-0 z-10">
+            
+            <div class="flex items-center gap-3">
+                {{-- Hamburger Button --}}
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden text-gray-400 hover:text-white focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+
+                <h2 class="text-lg font-semibold text-gray-100 truncate">
+                    @yield('title')
+                </h2>
+            </div>
 
             <div class="flex gap-2">
                 @if(auth()->user()->google_refresh_token)
                     <form method="POST" action="{{ route('gmail.sync') }}">
                         @csrf
-                        <button class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm">
+                        <button class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm whitespace-nowrap">
                             🔄 Sync
                         </button>
                     </form>
 
                     <form method="POST" action="{{ route('google.disconnect') }}">
                         @csrf
-                        <button class="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm">
+                        <button class="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm whitespace-nowrap hidden sm:inline-block">
                             🔌 Disconnect
+                        </button>
+                        {{-- Mobile Icon Only --}}
+                        <button class="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm sm:hidden">
+                            🔌
                         </button>
                     </form>
                 @else
                     <a href="{{ route('google.redirect') }}"
-                       class="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm">
-                        🔗 Connect Gmail
+                       class="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm whitespace-nowrap">
+                        🔗 Connect
                     </a>
                 @endif
             </div>
 
-            <form method="POST" action="{{ route('ai.toggle') }}">
-                @csrf
-                <button class="px-3 py-1 text-sm rounded
-                    {{ auth()->user()->ai_enabled ? 'bg-purple-600' : 'bg-gray-600' }}">
-                    🤖 AI {{ auth()->user()->ai_enabled ? 'ON' : 'OFF' }}
-                </button>
-            </form>
+            <div class="ml-2 hidden sm:block">
+                <form method="POST" action="{{ route('ai.toggle') }}">
+                    @csrf
+                    <button class="px-3 py-1 text-sm rounded whitespace-nowrap
+                        {{ auth()->user()->ai_enabled ? 'bg-purple-600' : 'bg-gray-600' }}">
+                        🤖 AI {{ auth()->user()->ai_enabled ? 'ON' : 'OFF' }}
+                    </button>
+                </form>
+            </div>
 
         </header>
 
         {{-- CONTENT --}}
-        <section class="flex-1 overflow-y-auto bg-gray-900">
+        <section class="flex-1 overflow-y-auto bg-gray-900 relative">
             @yield('content')
         </section>
 

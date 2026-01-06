@@ -1,6 +1,6 @@
 @extends('layouts.mail')
 
-@section('title', 'Inbox')
+@section('title', 'Email')
 
 @section('content')
 
