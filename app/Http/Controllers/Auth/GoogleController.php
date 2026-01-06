@@ -38,6 +38,11 @@ class GoogleController extends Controller
             'gmail_connected_at' => now(),
         ]);
 
+        // Check for phone number
+        if (is_null($user->phone_number)) {
+            return redirect()->route('phone.setup');
+        }
+
         return redirect('/inbox');
     }
     public function disconnect(Request $request)

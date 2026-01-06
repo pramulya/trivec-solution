@@ -41,4 +41,9 @@ return [
     'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'termii' => [
+        'key' => env('TERMII_API_KEY'),
+        'url' => env('TERMII_URL', 'https://v3.api.termii.com/api'),
+    ],
+
 ];

@@ -13,73 +13,50 @@ class InboxController extends Controller
     public function sync(Request $request)
     {
         $user = Auth::user();
-        if (!$user->google_refresh_token) return back()->with('error', 'Please connect Gmail first');
+        
+        // Handle connection check
+        if (!$user->google_refresh_token) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'error' => 'Not connected'], 401);
+            }
+            return back()->with('error', 'Please connect Gmail first');
+        }
+
+        // NON-BLOCKING OPTIMIZATION:
+        // Release the session lock immediately so the UI doesn't freeze while this runs.
+        // The sync process takes 10-20s, we don't want the user waiting that long to switch pages.
+        session()->save();
 
         $folder = $request->input('folder', 'inbox');
+        $pageToken = $request->input('pageToken', null); // Support for crawling
         $labelId = $this->getLabelId($folder);
 
         try {
-            $result = $this->syncMessages($user, $folder, $labelId, 50);
-            return back()->with('success', $result['message']);
+            // syncMessages now returns ['count' => X, 'nextPageToken' => Y]
+            // Reduced batch size to 20 to prevent timeouts
+            $result = $this->syncMessages($user, $folder, $labelId, 20, $pageToken);
+            
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'count' => $result['count'],
+                    'nextPageToken' => $result['nextPageToken'],
+                    'folder' => $folder
+                ]);
+            }
+
+            // For manual button click
+            $msg = $result['count'] > 0 
+                ? "Synced {$result['count']} new messages." 
+                : "Folder is up to date.";
+            return back()->with('success', $msg);
+
         } catch (\Throwable $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            }
             return back()->with('error', 'Sync failed: ' . $e->getMessage());
         }
-    }
-
-    public function index()
-    {
-        // $this->autoSync('inbox'); // Moved to AJAX
-        
-        $messages = Message::where('user_id', auth()->id())
-            ->where('folder', 'inbox')
-            ->orderBy('email_date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->paginate(50);
-
-        return view('inbox.index', compact('messages'));
-    }
-
-    public function drafts()
-    {
-        // $this->autoSync('drafts');
-
-        $messages = Message::where('user_id', auth()->id())
-            ->where('folder', 'drafts')
-            ->orderBy('email_date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->paginate(50);
-
-        return view('folders.drafts', compact('messages'));
-    }
-
-    public function sent()
-    {
-        // $this->autoSync('sent');
-
-        $messages = Message::where('user_id', auth()->id())
-            ->where('folder', 'sent')
-            ->orderBy('email_date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->paginate(50);
-
-        return view('folders.sent', compact('messages'));
-    }
-
-    public function starred()
-    {
-        // $this->autoSync('starred'); // Optional: syncing 'STARRED' label might duplicate content if not careful, but let's keep it for now or rely on other syncs
-        // Actually, let's keep autoSync but understand it might create copies if we aren't careful with generic sync logic.
-        // For now, the VIEW issue is the priority.
-        // For now, the VIEW issue is the priority.
-        // $this->autoSync('starred');
-
-        $messages = Message::where('user_id', auth()->id())
-            ->where('is_starred', true) // ✅ Correct logic
-            ->orderBy('email_date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->paginate(50);
-
-        return view('folders.starred', compact('messages'));
     }
 
     // --- HELPER METHODS ---
@@ -95,172 +72,200 @@ class InboxController extends Controller
             default  => 'INBOX',
         };
     }
-
-    private function autoSync($folder)
+    
+    private function syncMessages($user, $folder, $labelId, $limit = 20, $pageToken = null)
     {
-        $user = Auth::user();
-        if ($user && $user->google_refresh_token) {
-            try {
-                // Auto-sync with smaller limit (20) for speed
-                $this->syncMessages($user, $folder, $this->getLabelId($folder), 20);
-            } catch (\Throwable $e) {
-                // Silent fail for auto-sync
-                \Log::error("Auto-sync failed for $folder: " . $e->getMessage());
-            }
-        }
-    }
-
-    private function syncMessages($user, $folder, $labelId, $limit = 50)
-    {
-        set_time_limit(60); 
+        // Prevent timeout during heavy AI/Network ops
+        set_time_limit(120); 
 
         $gmail = new GmailService($user);
-        $detector = new PhishingDetectionService();
-
-        $messages = $gmail->fetchMessages($labelId, $limit); 
         
-        $startTime = time();
-        $maxExecutionTime = 55;
-        $processed = 0;
-        $skipped = 0;
+        // Fetch fetchPage from GmailService returns ['messages' => [], 'nextPageToken' => '...']
+        $data = $gmail->fetchMessages($labelId, $limit, $pageToken);
+        $gmailMessages = $data['messages'];
 
-        // 1. Pre-process
-        $newMessagesData = [];
-        foreach ($messages as $msg) {
-             if (time() - $startTime >= $maxExecutionTime) break;
+        $batchItems = [];
+        $messagesDetails = [];
+        $count = 0;
 
-             $gmailMessageId = $msg->getId();
+        foreach ($gmailMessages as $gmailMsg) {
+            // Check if exists
+            if (Message::where('gmail_message_id', $gmailMsg->getId())->exists()) {
+                continue;
+            }
 
-             if ($existing = Message::where('gmail_message_id', $gmailMessageId)->first()) {
-                 // Optimization: If we are intentionally syncing STARRED, 
-                 // we know this message is starred, so update it.
-                 if ($labelId === 'STARRED' && !$existing->is_starred) {
-                     $existing->update(['is_starred' => true]);
-                     // We don't increment $processed because we didn't do a full AI analysis/insert
-                     // but we effectively "synced" status.
-                 }
-                 $skipped++;
-                 continue;
-             }
+            // Get full details
+            try {
+                $details = $gmail->getFullMessage($gmailMsg->getId());
+                
+                // Prepare for Batch Analysis (Subject + Body)
+                $analyticsText = $details['subject'] . "\n" . $details['body'];
+                
+                $batchItems[] = [
+                    'id' => $gmailMsg->getId(),
+                    'body' => $analyticsText
+                ];
 
-             try {
-                 $data = $gmail->getFullMessage($gmailMessageId);
-                 if (empty($data['body'])) continue;
-                 
-                 $newMessagesData[] = [
-                     'id' => $gmailMessageId,
-                     'data' => $data 
-                 ];
-             } catch (\Throwable $e) {
-                 continue;
-             }
+                $messagesDetails[$gmailMsg->getId()] = $details;
+
+            } catch (\Throwable $e) {
+                \Log::warning("Failed to fetch message details: " . $gmailMsg->getId());
+            }
         }
 
-        // 2. AI Analysis
-        $analysisResults = [];
-        if ($user->ai_enabled && count($newMessagesData) > 0) {
-            $batchInput = array_map(function($item) {
-                 return [
-                     'id' => $item['id'],
-                     'body' => strip_tags($item['data']['body'])
-                 ];
-            }, $newMessagesData);
-
-            $analysisResults = $detector->analyzeBatch($batchInput);
+        // Run Batch AI Analysis (1 Process Startup instead of 50)
+        $aiResults = [];
+        if (!empty($batchItems)) {
+            $phishing = new PhishingDetectionService();
+            $aiResults = $phishing->analyzeBatch($batchItems);
         }
 
-        // 3. Save
-        foreach ($newMessagesData as $item) {
-            $gmailMessageId = $item['id'];
-            $data = $item['data'];
-            $analysis = $analysisResults[$gmailMessageId] ?? null;
-
-            $isStarred = in_array('STARRED', $data['labelIds'] ?? []);
-            $isHtml = $data['is_html'] ?? false;
-            $emailDate = $data['date'] ? \Carbon\Carbon::parse($data['date']) : now();
+        // Save to Database
+        foreach ($messagesDetails as $gmailId => $details) {
+            $analysis = $aiResults[$gmailId] ?? [
+                'label' => 'processing_error', 
+                'score' => 0, 
+                'rules' => []
+            ];
 
             Message::create([
-                'user_id'          => $user->id,
-                'folder'           => $folder,
-                'is_starred'       => $isStarred,
-                'gmail_message_id' => $gmailMessageId,
-                'from'             => $data['from'] ?? 'Unknown',
-                'subject'          => $data['subject'] ?? '(No subject)',
-                'snippet'          => $data['snippet'] ?? null,
-                'body'             => $data['body'],
-                'email_date'       => $emailDate,
-                'is_html'          => $isHtml,
-                'phishing_label' => $analysis['label'] ?? null,
-                'phishing_score' => $analysis['score'] ?? null,
-                'is_analyzed' => $analysis !== null,
+                'user_id' => $user->id,
+                'gmail_message_id' => $gmailId,
+                'folder' => $folder,
+                'subject' => $details['subject'],
+                'from' => $details['from'],
+                'snippet' => $details['snippet'],
+                'body' => $details['body'],
+                'is_html' => $details['is_html'],
+                'email_date' => date('Y-m-d H:i:s', strtotime($details['date'])),
+                'is_starred' => in_array('STARRED', $details['labelIds']),
+                'phishing_label' => $analysis['label'],
+                'phishing_score' => $analysis['score'],
+                'phishing_rules' => json_encode($analysis['rules'] ?? []),
             ]);
-
-            $processed++;
+            $count++;
         }
 
-        $message = "Synced {$processed} {$folder} message(s)";
-        if ($skipped > 0) $message .= ", skipped {$skipped} duplicate(s)";
-        
-        return ['message' => $message, 'processed' => $processed];
+        return [
+            'count' => $count, 
+            'nextPageToken' => $data['nextPageToken']
+        ];
     }
-
+    
     public function show(Message $message)
     {
         abort_if($message->user_id !== auth()->id(), 403);
+        
+        $message->load('attachments');
 
-        $rules = json_decode($message->phishing_rules ?? '[]', true);
-
-        preg_match_all('/https?:\/\/[^\s"<]+/i', $message->body, $matches);
-        $links = $matches[0] ?? [];
-
-        return view('inbox.show', compact('message', 'rules', 'links'));
+        if (request()->wantsJson()) {
+            return response()->json([
+                'message' => $message,
+                'formatted_date' => $message->email_date->format('M d, Y h:i A')
+            ]);
+        }
+        
+        return view('inbox.show', compact('message'));
     }
 
-    public function toggleStar(Message $message)
+    public function index()
     {
-        abort_if($message->user_id !== auth()->id(), 403);
+        $messages = Message::where('user_id', auth()->id())
+            ->where('folder', 'inbox')
+            ->orderBy('email_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
 
-        try {
-            $user = Auth::user();
-            $gmail = new GmailService($user);
-
-            // Toggle local
-            $newState = !$message->is_starred;
-            $message->update(['is_starred' => $newState]);
-
-            // Sync to Gmail
-            $gmail->toggleStar($message->gmail_message_id, $newState);
-
-            return back()->with('success', $newState ? 'Message starred' : 'Message unstarred');
-
-        } catch (\Throwable $e) {
-            return back()->with('error', 'Failed to update star: ' . $e->getMessage());
+        if (request()->wantsJson()) {
+            return response()->json($messages);
         }
+        return view('inbox.index', compact('messages'));
+    }
+
+    public function downloadAttachment($id)
+    {
+        $attachment = \App\Models\Attachment::findOrFail($id);
+        $message = Message::where('gmail_message_id', $attachment->message_id)->first();
+
+        // Security Check: Ensure user owns the message
+        if (!$message || $message->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        if (!\Storage::exists($attachment->path)) {
+            abort(404, 'File not found on server');
+        }
+
+        return \Storage::download($attachment->path, $attachment->filename);
+    }
+
+    public function drafts()
+    {
+        $messages = Message::where('user_id', auth()->id())
+            ->where('folder', 'drafts')
+            ->orderBy('email_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
+
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+        return view('folders.drafts', compact('messages'));
+    }
+
+    public function sent()
+    {
+        $messages = Message::where('user_id', auth()->id())
+            ->where('folder', 'sent')
+            ->orderBy('email_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
+
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+        return view('folders.sent', compact('messages'));
+    }
+
+    public function starred()
+    {
+        $messages = Message::where('user_id', auth()->id())
+            ->where('is_starred', true) 
+            ->orderBy('email_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
+
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+        return view('folders.starred', compact('messages'));
     }
 
     public function trash()
     {
-        // $this->autoSync('trash');
-
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'trash')
             ->orderBy('email_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->paginate(50);
 
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
         return view('folders.trash', compact('messages'));
     }
 
     public function spam()
     {
-        // $this->autoSync('spam');
-
         $messages = Message::where('user_id', auth()->id())
             ->where('folder', 'spam')
             ->orderBy('email_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->paginate(50);
 
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
         return view('folders.spam', compact('messages'));
     }
 

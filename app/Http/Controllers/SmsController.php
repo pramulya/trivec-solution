@@ -18,43 +18,58 @@ class SmsController extends Controller
 
     public function sync()
     {
-        $messages = $this->termii->fetchMessages();
-        $count = 0;
+        try {
+            $messages = $this->termii->fetchMessages();
+            $count = 0;
+            // ... (keeping existing logic roughly, but optimizing for file edit size)
+            // Re-implementing logic to ensure we don't lose it.
+            foreach ($messages as $msg) {
+                // Simple duplication check
+                $exists = \App\Models\SmsMessage::where('sender', $msg['sender'])
+                    ->where('body', $msg['sms'])
+                    ->where('user_id', auth()->id())
+                    ->exists();
 
-        foreach ($messages as $msg) {
-        // Simple duplication check
-            $exists = \App\Models\SmsMessage::where('sender', $msg['sender'])
-                ->where('body', $msg['sms'])
-                ->where('user_id', auth()->id())
-                ->exists();
+                if (!$exists) {
+                    $sms = \App\Models\SmsMessage::create([
+                        'user_id' => auth()->id(),
+                        'sender' => $msg['sender'],
+                        'body' => $msg['sms'],
+                        'source' => 'termii',
+                        'received_at' => $msg['date_created'],
+                    ]);
 
-            if (!$exists) {
-                $sms = \App\Models\SmsMessage::create([
-                    'user_id' => auth()->id(),
-                    'sender' => $msg['sender'],
-                    'body' => $msg['sms'],
-                    'source' => 'termii',
-                    'received_at' => $msg['date_created'],
-                ]);
+                    // Trigger AI
+                    if (auth()->user()->ai_enabled) {
+                        $analysis = $this->detector->analyzeBatch([
+                            ['id' => $sms->id, 'body' => $sms->body]
+                        ], 'sms');
 
-                // Trigger AI
-                if (auth()->user()->ai_enabled) {
-                    $analysis = $this->detector->analyzeBatch([
-                        ['id' => $sms->id, 'body' => $sms->body]
-                    ], 'sms');
-
-                    if (isset($analysis[$sms->id])) {
-                        $sms->update([
-                            'ai_label' => $analysis[$sms->id]['label'],
-                            'ai_score' => $analysis[$sms->id]['score']
-                        ]);
+                        if (isset($analysis[$sms->id])) {
+                            $sms->update([
+                                'ai_label' => $analysis[$sms->id]['label'],
+                                'ai_score' => $analysis[$sms->id]['score']
+                            ]);
+                        }
                     }
+                    $count++;
                 }
-                $count++;
             }
-        }
 
-        return back()->with('success', "Synced {$count} messages from Termii");
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'message' => "Synced {$count} messages",
+                    'count' => $count
+                ]);
+            }
+
+            return back()->with('success', "Synced {$count} messages from Termii");
+        } catch (\Exception $e) {
+            if (request()->wantsJson()) {
+                return response()->json(['message' => 'Sync failed: ' . $e->getMessage()], 500);
+            }
+            return back()->with('error', 'Sync failed');
+        }
     }
 
     public function inbox()
@@ -66,6 +81,11 @@ class SmsController extends Controller
             })
             ->latest('received_at')
             ->get();
+        
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+
         return view('sms.inbox', compact('messages'));
     }
 
@@ -75,6 +95,11 @@ class SmsController extends Controller
             ->where('ai_label', 'phishing')
             ->latest('received_at')
             ->get();
+            
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+
         return view('sms.spam', compact('messages'));
     }
 
@@ -84,6 +109,11 @@ class SmsController extends Controller
             ->where('direction', 'outbound')
             ->latest('created_at')
             ->get(); 
+            
+        if (request()->wantsJson()) {
+            return response()->json($messages);
+        }
+
         return view('sms.sent', compact('messages'));
     }
 
@@ -94,24 +124,31 @@ class SmsController extends Controller
             'message' => 'required|string',
         ]);
 
-        // Call Service
-        $response = $this->termii->sendMessage($data['to'], $data['message']);
+        try {
+            // Call Service
+            $response = $this->termii->sendMessage($data['to'], $data['message']);
 
-        // Save to DB
-        \App\Models\SmsMessage::create([
-            'user_id' => auth()->id(),
-            'sender' => $data['to'], // For outbound, sender is the recipient (or we can use a separate recipient column, but sticking to 'sender' as 'contact' for now is simpler for a prototype, OR better: use 'sender' as 'Me' and 'body' starts with 'To: ...' ? No, let's just reuse 'sender' as the 'other party phone number' to keep schema simple, adding a direction column clarifies who sent it.)
-            // Actually, to be clearer: 'sender' column usually implies WHO SENT IT.
-            // For OUTBOUND: Sender is ME, but better to store the DESTINATION in 'sender' and rely on 'direction=outbound' to know it was sent TO them.
-            // Or better: Change schema to 'contact'. But for now, let's treat 'sender' as 'The Other Party'.
-            'sender' => $data['to'], 
-            'body' => $data['message'],
-            'direction' => 'outbound',
-            'source' => 'manual', // or 'termii'
-            'received_at' => now(),
-        ]);
+            // Save to DB
+            $sms = \App\Models\SmsMessage::create([
+                'user_id' => auth()->id(),
+                'sender' => $data['to'], 
+                'body' => $data['message'],
+                'direction' => 'outbound',
+                'source' => 'manual', 
+                'received_at' => now(),
+            ]);
 
-        return back()->with('success', 'SMS queued for sending!');
+            if (request()->wantsJson()) {
+                return response()->json(['message' => 'SMS Sent!', 'data' => $sms]);
+            }
+
+            return back()->with('success', 'SMS queued for sending!');
+        } catch (\Exception $e) {
+            if (request()->wantsJson()) {
+                return response()->json(['message' => 'Send failed: ' . $e->getMessage()], 422);
+            }
+            return back()->with('error', 'Send failed');
+        }
     }
 
     public function store(Request $request) 
@@ -121,7 +158,6 @@ class SmsController extends Controller
             'body' => 'required|string',
         ]);
 
-        // 1. Create Record
         // 1. Create Record
         $sms = \App\Models\SmsMessage::create([
             'user_id' => auth()->id(),
@@ -135,7 +171,7 @@ class SmsController extends Controller
         if (auth()->user()->ai_enabled) {
             $analysis = $this->detector->analyzeBatch([
                 ['id' => $sms->id, 'body' => $sms->body]
-            ], 'sms'); // Use SMS Model
+            ], 'sms'); 
 
             if (isset($analysis[$sms->id])) {
                 $sms->update([
@@ -145,6 +181,75 @@ class SmsController extends Controller
             }
         }
 
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Message simulated!', 'data' => $sms]);
+        }
+
         return back()->with('success', 'Message added and analyzed!');
+    }
+    public function destroy(\App\Models\SmsMessage $sms)
+    {
+        abort_if($sms->user_id !== auth()->id(), 403);
+        $sms->delete();
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Deleted']);
+        }
+        return back()->with('success', 'SMS deleted');
+    }
+
+    public function handleWebhook(Request $request)
+    {
+        // 1. Validate (Loosely, to accept Termii's format)
+        // Termii payload: { "sender": "...", "receiver": "...", "message": "...", ... }
+        $data = $request->validate([
+            'sender' => 'required|string',
+            'receiver' => 'required|string',
+            'message' => 'required|string',
+        ]);
+
+        // 2. Find User by their "Virtual Number" (receiver)
+        // We match match the incoming 'receiver' (e.g., 628123...) with the user's saved 'phone_number'.
+        $user = \App\Models\User::where('phone_number', $data['receiver'])->first();
+
+        if (!$user) {
+            \Log::warning("Incoming SMS for unknown receiver: " . $data['receiver']);
+            return response()->json(['message' => 'User not found'], 200); // 200 to satisfy webhook
+        }
+
+        // 3. Store Message
+        $sms = \App\Models\SmsMessage::create([
+            'user_id' => $user->id,
+            'sender' => $data['sender'],     // The customer who sent the SMS
+            'body' => $data['message'],
+            'direction' => 'inbound',
+            'source' => 'termii',
+            'received_at' => now(),
+        ]);
+
+        // 4. Trigger AI Analysis
+        if ($user->ai_enabled) {
+            $analysis = $this->detector->analyzeBatch([
+                ['id' => $sms->id, 'body' => $sms->body]
+            ], 'sms');
+
+            if (isset($analysis[$sms->id])) {
+                $sms->update([
+                    'ai_label' => $analysis[$sms->id]['label'],
+                    'ai_score' => $analysis[$sms->id]['score']
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'Received']);
+    }
+
+    public function markAsSpam(\App\Models\SmsMessage $sms) 
+    {
+        abort_if($sms->user_id !== auth()->id(), 403);
+        $sms->update(['ai_label' => 'phishing']); // Or a dedicated is_spam column if preferred, but existing logic uses ai_label='phishing' for spam folder.
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Marked as spam']);
+        }
+        return back()->with('success', 'Marked as spam');
     }
 }

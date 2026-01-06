@@ -23,6 +23,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/', fn() => redirect('/inbox'));
 
+    // Phone Setup
+    Route::get('/setup-phone', [\App\Http\Controllers\Auth\PhoneSetupController::class, 'create'])->name('phone.setup');
+    Route::post('/setup-phone', [\App\Http\Controllers\Auth\PhoneSetupController::class, 'store'])->name('phone.store');
+
     // Gmail OAuth
     Route::get('/auth/google', [GoogleController::class, 'redirect'])
         ->name('google.redirect');
@@ -39,6 +43,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/inbox/{message}/star', [InboxController::class, 'toggleStar'])
         ->name('inbox.star');
+    
+    // Attachments
+    Route::get('/attachments/{id}', [InboxController::class, 'downloadAttachment'])
+        ->name('attachments.download');
 
     // Folders
     Route::post('/gmail/sync', [InboxController::class, 'sync'])
@@ -84,5 +92,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/sms/sent', [\App\Http\Controllers\SmsController::class, 'sent'])->name('sms.sent');
     Route::get('/sms/spam', [\App\Http\Controllers\SmsController::class, 'spam'])->name('sms.spam');
     Route::get('/sms/show', fn () => view('sms.show'));
+    Route::delete('/sms/{sms}', [\App\Http\Controllers\SmsController::class, 'destroy'])->name('sms.destroy');
+    Route::post('/sms/{sms}/spam', [\App\Http\Controllers\SmsController::class, 'markAsSpam'])->name('sms.spam.mark');
 
 });

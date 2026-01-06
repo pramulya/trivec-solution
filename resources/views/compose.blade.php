@@ -10,7 +10,7 @@
             <h2 class="text-xl font-bold text-white">New Message</h2>
         </div>
 
-        <form action="{{ route('compose.send') }}" method="POST" class="p-6 space-y-6">
+        <form action="{{ route('compose.send') }}" method="POST" class="p-6 space-y-6" enctype="multipart/form-data">
             @csrf
 
             {{-- Error/Success --}}
@@ -42,6 +42,13 @@
                           class="w-full bg-gray-900 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition" 
                           placeholder="Type your message here..." required>{{ old('body') }}</textarea>
                 @error('body') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-400 mb-1">Attachments</label>
+                <input type="file" name="attachments[]" multiple
+                       class="w-full bg-gray-900 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+                @error('attachments.*') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
 
             <div class="flex justify-end pt-4">

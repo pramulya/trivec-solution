@@ -14,10 +14,12 @@ return new class extends Migration
         Schema::create('sms_messages', function (Blueprint $table) {
             $table->id();
             
-            $table->string('sender'); // Phone number or name
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade')->index();
+            $table->string('sender')->index(); // Phone number or name
             $table->text('body');
             $table->string('source')->default('manual'); // 'manual' or 'termii'
-            $table->timestamp('received_at')->useCurrent();
+            $table->string('direction')->default('inbound')->index(); // inbound, outbound
+            $table->timestamp('received_at')->useCurrent()->index();
             
             // AI Analysis
             $table->string('ai_label')->nullable(); 
