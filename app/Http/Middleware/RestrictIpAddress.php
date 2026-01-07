@@ -15,8 +15,8 @@ class RestrictIpAddress
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $allowedIpsString = env('ALLOWED_IPS');
-        
+        $allowedIpsString = config('app.allowed_ips');
+
         // If no IPs are defined, we might want to fail open or closed. 
         // Failing closed (deny all) is safer for a restriction middleware.
         if (empty($allowedIpsString)) {
