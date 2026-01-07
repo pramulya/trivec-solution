@@ -140,12 +140,11 @@
 
             <div class="flex gap-2">
                 @if(auth()->user()->google_refresh_token)
-                    <form method="POST" action="{{ route('gmail.sync') }}">
-                        @csrf
-                        <button class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm whitespace-nowrap">
-                            🔄 Sync
-                        </button>
-                    </form>
+                    <button id="manual-sync-btn"
+                            class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm whitespace-nowrap"
+                            onclick="window.dispatchEvent(new CustomEvent('trivec:sync-manual'))">
+                        🔄 Sync
+                    </button>
 
                     <form method="POST" action="{{ route('google.disconnect') }}">
                         @csrf

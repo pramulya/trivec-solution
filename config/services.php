@@ -46,4 +46,17 @@ return [
         'url' => env('TERMII_URL', 'https://v3.api.termii.com/api'),
     ],
 
+
+
+    'ai' => [
+        'enabled' => env('AI_ENABLED', true),
+    ],
+
+    'python' => [
+        'path' => env('PYTHON_PATH', 'python'),
+        'script' => env('PYTHON_SCRIPT_PATH', base_path('python_scripts/predict.py')),
+        'model_dir' => env('PYTHON_MODEL_DIR', storage_path('app/ai_models')),
+    ],
+
+
 ];

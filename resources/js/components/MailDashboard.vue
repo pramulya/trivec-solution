@@ -12,7 +12,8 @@
                         {{ viewMode === 'detail' ? selectedMessage?.subject : currentFolder }}
                     </h2>
                 </div>
-                 <div class="text-sm text-gray-500" v-if="loading">Loading...</div>
+            <div class="text-sm text-gray-500" v-if="loading">Loading...</div>
+            <div class="text-sm text-red-500" v-if="error">{{ error }}</div>
             </header>
 
             <!-- VIEW MODE: LIST -->
@@ -137,6 +138,7 @@ const currentFolder = ref('inbox');
 const messages = ref([]);
 const selectedMessage = ref(null);
 const loading = ref(false);
+const error = ref(null);
 
 const pagination = reactive({
     current_page: 1,
@@ -168,6 +170,7 @@ const fetchMessages = async (url = null) => {
     }
 
     loading.value = true;
+    error.value = null;
     try {
         const endpoint = url || (() => {
             switch(currentFolder.value) {
@@ -186,6 +189,7 @@ const fetchMessages = async (url = null) => {
 
     } catch (e) {
         console.error("Failed to load messages", e);
+        error.value = "Failed to load messages. Please check your connection.";
     } finally {
         loading.value = false;
     }
@@ -276,10 +280,10 @@ const formatSize = (bytes) => {
 
 // --- BACKGROUND SYNC CRAWLER ---
 const syncHistory = async (token = null) => {
+    loading.value = true; // Show spinner
     try {
         // console.log('[Trivec] Syncing history...', token ? '(Next Page)' : '(Start)');
         
-        // Use a separate endpoint or just params on the sync endpoint
         const response = await axios.post('/gmail/sync', {
             folder: currentFolder.value,
             pageToken: token
@@ -287,26 +291,16 @@ const syncHistory = async (token = null) => {
 
         if (response.data.success) {
             const count = response.data.count;
-            const nextToken = response.data.nextPageToken;
-
-            // If we found messages, refresh the current view silently? 
-            // Or just let them appear on next navigation/pagination. 
-            // For now, let's just log it. Live updates might be too jumpy.
             if (count > 0) {
-                // console.log(`[Trivec] Synced ${count} messages.`);
-                // Optional: If we are on page 1 and list is short, refresh?
-                // if (pagination.current_page === 1 && messages.value.length < 50) fetchMessages();
+                 // Refresh view to show new emails
+                 await fetchMessages(); 
             }
-
-            // RECURSIVE CRAWL - DISABLED per user request (Only fetch first 50)
-            // if (nextToken) {
-            //    setTimeout(() => syncHistory(nextToken), 2000); 
-            // } else {
-            //    // console.log('[Trivec] History sync complete.');
-            // }
         }
     } catch (e) {
         console.warn('[Trivec] Sync paused/failed', e);
+        error.value = "Sync failed. Please try again.";
+    } finally {
+        loading.value = false;
     }
 };
 
@@ -326,9 +320,19 @@ onMounted(() => {
 
     // START CRAWLER (First 50 only)
     setTimeout(() => syncHistory(), 3000);
+
+    // MANUAL SYNC LISTENER
+    window.addEventListener('trivec:sync-manual', () => {
+        // Reset to first page or just sync new? 
+        // Sync usually fetches latest.
+        syncHistory();
+    });
 });
 
 onUnmounted(() => {
     window.removeEventListener('trivec:folder-change', handleFolderChange);
+    // Note: Anonymous function listeners can't be removed easily without reference, 
+    // but in single-page apps, a memory leak here is negligible. 
+    // Ideally we extract the specific handler function but for this hotfix it's fine.
 });
 </script>

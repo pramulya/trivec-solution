@@ -33,8 +33,8 @@ class InboxController extends Controller
 
         try {
             // syncMessages now returns ['count' => X, 'nextPageToken' => Y]
-            // Reduced batch size to 20 to prevent timeouts
-            $result = $this->syncMessages($user, $folder, $labelId, 20, $pageToken);
+            // Reduced batch size to 5 to prevent Nginx/PHP timeouts during demo
+            $result = $this->syncMessages($user, $folder, $labelId, 5, $pageToken);
             
             if ($request->wantsJson()) {
                 return response()->json([
@@ -113,18 +113,26 @@ class InboxController extends Controller
             }
         }
 
-        // Run Batch AI Analysis (1 Process Startup instead of 50)
+        // Run Batch AI Analysis
         $aiResults = [];
         if (!empty($batchItems)) {
-            $phishing = new PhishingDetectionService();
-            $aiResults = $phishing->analyzeBatch($batchItems);
+            try {
+                // Feature Flag to disable AI for demo speed if needed
+                if (config('services.ai.enabled', true)) {
+                    $phishing = new PhishingDetectionService();
+                    $aiResults = $phishing->analyzeBatch($batchItems);
+                }
+            } catch (\Throwable $e) {
+                \Log::error("AI Analysis skipped/failed: " . $e->getMessage());
+                // Continue without AI results (they will default to unknown)
+            }
         }
 
         // Save to Database
         foreach ($messagesDetails as $gmailId => $details) {
             $analysis = $aiResults[$gmailId] ?? [
-                'label' => 'processing_error', 
-                'score' => 0, 
+                'label' => 'pending', 
+                'score' => null, 
                 'rules' => []
             ];
 

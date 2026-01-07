@@ -30,11 +30,11 @@ class PhishingDetectionService
     {
         if (empty($items)) return [];
 
-        $scriptPath = base_path('python_scripts/predict.py');
+        $scriptPath = config('services.python.script');
         
         // Dynamic model selection
         $modelName = ($type === 'sms') ? 'sms_model.pkl' : 'email_model.pkl';
-        $modelPath = storage_path("app/ai_models/{$modelName}"); 
+        $modelPath = config('services.python.model_dir') . "/{$modelName}"; 
 
         // Use file-based IPC
         $tempFile = storage_path('app/temp_ai_batch_' . uniqid() . '.json');
@@ -43,8 +43,8 @@ class PhishingDetectionService
         $jsonData = json_encode($items, JSON_THROW_ON_ERROR);
         file_put_contents($tempFile, $jsonData);
 
-        // Absolute path based on user's traceback
-        $pythonPath = 'C:\Users\denni\AppData\Local\Programs\Python\Python313\python.exe';
+        // Use environmental path, fallback to simple 'python' command (common on Linux VPS)
+        $pythonPath = config('services.python.path');
 
         $process = new \Symfony\Component\Process\Process([
             $pythonPath, 
