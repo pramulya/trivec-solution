@@ -86,7 +86,7 @@ class GmailService
 
             $nextPageToken = $response->getNextPageToken();
         } catch (\Exception $e) {
-            // Log error or just return empty if failed
+            \Illuminate\Support\Facades\Log::error('Gmail Fetch Error: ' . $e->getMessage());
         }
 
         return [

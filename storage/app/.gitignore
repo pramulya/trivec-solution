@@ -1,4 +1,5 @@
 *
+!ai_models/
 !private/
 !public/
 !.gitignore
