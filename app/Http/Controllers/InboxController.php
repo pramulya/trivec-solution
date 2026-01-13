@@ -52,6 +52,7 @@ class InboxController extends Controller
             return back()->with('success', $msg);
 
         } catch (\Throwable $e) {
+            \Log::error("SYNC-DEBUG: Sync failed entirely: " . $e->getMessage());
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
             }
