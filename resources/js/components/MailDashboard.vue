@@ -14,6 +14,9 @@
                 </div>
             <div class="text-sm text-gray-500" v-if="loading">Loading...</div>
             <div class="text-sm text-red-500" v-if="error">{{ error }}</div>
+            <div class="text-xs text-blue-400 animate-pulse px-6 py-1" v-if="!loading && error === null">
+                Background Sync Active...
+            </div>
             </header>
 
             <!-- VIEW MODE: LIST -->
@@ -280,7 +283,10 @@ const formatSize = (bytes) => {
 
 // --- BACKGROUND SYNC CRAWLER ---
 const syncHistory = async (token = null) => {
-    loading.value = true; // Show spinner
+    // loading.value = true; // Don't block UI for background sync
+    const isBackground = !!token;
+    if (!isBackground) loading.value = true;
+
     try {
         // console.log('[Trivec] Syncing history...', token ? '(Next Page)' : '(Start)');
         
@@ -298,7 +304,8 @@ const syncHistory = async (token = null) => {
 
             // Recursive Crawler: Continue if there is a next page
             if (response.data.nextPageToken) {
-                setTimeout(() => syncHistory(response.data.nextPageToken), 1500);
+                // Accelerate: 200ms delay for next batch
+                setTimeout(() => syncHistory(response.data.nextPageToken), 200);
             }
         }
     } catch (e) {
@@ -323,8 +330,8 @@ onMounted(() => {
         }
     });
 
-    // START CRAWLER (First 50 only)
-    setTimeout(() => syncHistory(), 3000);
+    // START CRAWLER (Continuous Background)
+    setTimeout(() => syncHistory(), 1000);
 
     // MANUAL SYNC LISTENER
     window.addEventListener('trivec:sync-manual', () => {
