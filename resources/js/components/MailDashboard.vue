@@ -300,6 +300,7 @@ const syncHistory = async (token = null) => {
             if (count > 0) {
                  // Refresh view to show new emails
                  await fetchMessages(); 
+                 console.log(`[Trivec] Batch synced: ${count} emails. Next Token: ${response.data.nextPageToken ? 'Yes' : 'No'}`); 
             }
 
             // Recursive Crawler: Continue if there is a next page

@@ -33,7 +33,7 @@ class InboxController extends Controller
 
         try {
             // syncMessages now returns ['count' => X, 'nextPageToken' => Y]
-            $result = $this->syncMessages($user, $folder, $labelId, 50, $pageToken);
+            $result = $this->syncMessages($user, $folder, $labelId, 25, $pageToken);
             
             if ($request->wantsJson()) {
                 return response()->json([
