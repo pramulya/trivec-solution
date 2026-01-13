@@ -340,7 +340,8 @@ class GmailService
     public function sendEmail(string $to, string $subject, string $body, array $attachments = [])
     {
         $mime = new \Illuminate\Mail\Message(new \Symfony\Component\Mime\Email());
-        $mime->to($to)
+        $mime->from($this->user->email, $this->user->name)
+             ->to($to)
              ->subject($subject)
              ->html($body);
 
