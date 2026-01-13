@@ -295,6 +295,11 @@ const syncHistory = async (token = null) => {
                  // Refresh view to show new emails
                  await fetchMessages(); 
             }
+
+            // Recursive Crawler: Continue if there is a next page
+            if (response.data.nextPageToken) {
+                setTimeout(() => syncHistory(response.data.nextPageToken), 1500);
+            }
         }
     } catch (e) {
         console.warn('[Trivec] Sync paused/failed', e);

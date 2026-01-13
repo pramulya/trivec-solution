@@ -33,8 +33,7 @@ class InboxController extends Controller
 
         try {
             // syncMessages now returns ['count' => X, 'nextPageToken' => Y]
-            // Reduced batch size to 5 to prevent Nginx/PHP timeouts during demo
-            $result = $this->syncMessages($user, $folder, $labelId, 5, $pageToken);
+            $result = $this->syncMessages($user, $folder, $labelId, 10, $pageToken);
             
             if ($request->wantsJson()) {
                 return response()->json([
@@ -52,7 +51,6 @@ class InboxController extends Controller
             return back()->with('success', $msg);
 
         } catch (\Throwable $e) {
-            \Log::error("SYNC-DEBUG: Sync failed entirely: " . $e->getMessage());
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
             }
@@ -76,8 +74,6 @@ class InboxController extends Controller
     
     private function syncMessages($user, $folder, $labelId, $limit = 20, $pageToken = null)
     {
-        \Log::info("SYNC-DEBUG: Starting sync for user {$user->id}, folder: {$folder}, label: {$labelId}");
-
         // Prevent timeout during heavy AI/Network ops
         set_time_limit(120); 
 
@@ -87,8 +83,6 @@ class InboxController extends Controller
         $data = $gmail->fetchMessages($labelId, $limit, $pageToken);
         $gmailMessages = $data['messages'];
 
-        \Log::info("SYNC-DEBUG: fetchMessages returned " . count($gmailMessages) . " messages.");
-
         $batchItems = [];
         $messagesDetails = [];
         $count = 0;
@@ -96,11 +90,8 @@ class InboxController extends Controller
         foreach ($gmailMessages as $gmailMsg) {
             // Check if exists
             if (Message::where('gmail_message_id', $gmailMsg->getId())->exists()) {
-                // \Log::info("SYNC-DEBUG: Skipping existing message " . $gmailMsg->getId());
                 continue;
             }
-
-            \Log::info("SYNC-DEBUG: Processing new message " . $gmailMsg->getId());
 
             // Get full details
             try {
@@ -124,20 +115,16 @@ class InboxController extends Controller
         // Run Batch AI Analysis
         $aiResults = [];
         if (!empty($batchItems)) {
-            \Log::info("SYNC-DEBUG: Running AI analysis on " . count($batchItems) . " items.");
             try {
                 // Feature Flag to disable AI for demo speed if needed
                 if (config('services.ai.enabled', true)) {
                     $phishing = new PhishingDetectionService();
                     $aiResults = $phishing->analyzeBatch($batchItems);
-                    \Log::info("SYNC-DEBUG: AI analysis completed. Results count: " . count($aiResults));
                 }
             } catch (\Throwable $e) {
                 \Log::error("AI Analysis skipped/failed: " . $e->getMessage());
                 // Continue without AI results (they will default to unknown)
             }
-        } else {
-             \Log::info("SYNC-DEBUG: No items to run AI analysis on.");
         }
 
         // Save to Database
@@ -165,8 +152,6 @@ class InboxController extends Controller
             ]);
             $count++;
         }
-
-        \Log::info("SYNC-DEBUG: Sync completed. Saved {$count} new messages.");
 
         return [
             'count' => $count, 
